@@ -1,31 +1,45 @@
-import React from 'react';
-import { Image, Send, MapPin, Bold, Italic, List } from 'lucide-react';
+import React, { useState } from 'react';
+import { Send, Image as ImageIcon, X } from 'lucide-react';
+import api from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const CreateBlog = () => {
+  const [data, setData] = useState({ title: '', content: '', image: null });
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('title', data.title);
+    formData.append('content', data.content);
+    if (data.image) formData.append('image', data.image);
+
+    try {
+      await api.post('posts/', formData);
+      navigate('/blogs');
+    } catch { alert("Error sharing escape."); }
+  };
+
   return (
     <div className="p-8 md:p-16 max-w-4xl mx-auto">
-      <h1 className="text-5xl font-black tracking-tighter mb-12">Share your Escape</h1>
-      
-      <div className="space-y-6 bg-[var(--card-theme)] p-10 rounded-[3.5rem] border border-[var(--primary)]/10">
-        <input type="text" placeholder="Title your journey..." 
-          className="w-full text-4xl font-black bg-transparent outline-none placeholder:opacity-20 border-b-2 border-black/5 pb-6" />
+      <h1 className="text-5xl font-black mb-12">Share your Journey</h1>
+      <form onSubmit={handleSubmit} className="space-y-6 bg-[var(--card-theme)] p-10 rounded-[3rem] shadow-xl">
+        <input type="text" placeholder="Post Title" required className="w-full text-3xl font-bold bg-transparent outline-none border-b border-black/10 pb-4"
+          onChange={e => setData({...data, title: e.target.value})} />
         
-        <div className="flex gap-4 border-b border-black/5 pb-4 opacity-40">
-           <Bold size={18}/> <Italic size={18}/> <List size={18}/> <MapPin size={18}/>
-        </div>
+        <textarea placeholder="Write your story..." required className="w-full h-64 bg-transparent outline-none text-lg resize-none"
+          onChange={e => setData({...data, content: e.target.value})} />
 
-        <textarea placeholder="Tell your story. Where did you go? What did the air taste like?" 
-          className="w-full min-h-[300px] bg-transparent outline-none text-lg leading-relaxed resize-none" />
-
-        <div className="flex justify-between items-center pt-8 border-t border-black/5">
-          <button className="flex items-center gap-2 font-bold opacity-50 hover:opacity-100 transition-all">
-            <Image /> Add Photos
-          </button>
-          <button className="px-10 py-4 bg-[var(--primary)] text-white rounded-2xl font-black flex items-center gap-3">
-            Publish Post <Send size={18}/>
+        <div className="flex justify-between items-center border-t border-black/5 pt-8">
+          <input type="file" id="file" hidden onChange={e => setData({...data, image: e.target.files[0]})} />
+          <label htmlFor="file" className="flex items-center gap-2 cursor-pointer font-bold opacity-60 hover:opacity-100">
+            <ImageIcon /> {data.image ? data.image.name : "Add Cover Photo"}
+          </label>
+          <button className="px-10 py-4 bg-[var(--primary)] text-white rounded-2xl font-black flex items-center gap-2">
+            Publish <Send size={18}/>
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 };
