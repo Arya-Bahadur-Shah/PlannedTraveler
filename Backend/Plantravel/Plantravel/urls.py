@@ -1,31 +1,22 @@
-"""
-URL configuration for Plantravel project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path, include
-from app.views import LoginView, RegisterView
-from app.views import PostViewSet
 from rest_framework.routers import DefaultRouter
+from app.views import (
+    LoginView, RegisterView, PostViewSet, 
+    ProfileViewSet, request_password_reset, reset_password_confirm
+)
 
 router = DefaultRouter()
 router.register(r'posts', PostViewSet)
+router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Auth
     path('api/login/', LoginView.as_view(), name='token_obtain_pair'),
     path('api/register/', RegisterView.as_view(), name='register'),
-    path('api/', include(router.urls))
+    path('api/password-reset/', request_password_reset),
+    path('api/reset-confirm/<str:uidb64>/<str:token>/', reset_password_confirm),
+    # Viewsets (Posts, Profile)
+    path('api/', include(router.urls)),
 ]

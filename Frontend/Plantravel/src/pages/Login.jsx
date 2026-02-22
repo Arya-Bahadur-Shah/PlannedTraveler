@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import AuthError from '../components/AuthError';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, User, ArrowRight, Loader2, Compass } from 'lucide-react';
 import BackgroundVideo from '../components/BackgroundVideo';
@@ -11,16 +12,24 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [creds, setCreds] = useState({ username: '', password: '' });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
+    setError(null);
+     try {
       await login(creds.username, creds.password);
       navigate('/dashboard');
-    } catch { alert("Failed to explore. Check passport details."); }
-    finally { setLoading(false); }
+    } catch (err) {
+      // Django returns 401 for bad credentials
+      if (err.status === 401) {
+        setError("Passport check failed. Username or Secret Key is incorrect.");
+      } else {
+        setError("Network error. The server is unreachable.");
+      }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -37,7 +46,12 @@ const Login = () => {
           <h2 className="text-4xl font-black tracking-tighter" style={{ color: currentTheme.text }}>PlannedTraveler</h2>
           <p className="opacity-50 font-medium">Verify your itinerary credentials</p>
         </div>
-
+        <p className="mt-4 text-center">
+        <Link to="/forgot-password" style={{ color: 'var(--primary)' }} className="text-xs font-bold opacity-50 hover:opacity-100">
+          Forgot your Secret Key?
+        </Link>
+        </p>
+        <AuthError message={error} />
         <form onSubmit={handleSubmit} className="space-y-4">
           <input type="text" placeholder="Username" required className="w-full p-5 rounded-2xl bg-black/5 outline-none border border-transparent focus:border-white/50"
             onChange={e => setCreds({...creds, username: e.target.value})} />
@@ -49,7 +63,6 @@ const Login = () => {
             {loading ? <Loader2 className="animate-spin" /> : <>Explore <ArrowRight /></>}
           </button>
         </form>
-        <p className="mt-8 text-center text-sm opacity-40 font-bold">New Explorer? <Link to="/register" className="underline" style={{color: currentTheme.primary}}>Register Path</Link></p>
       </motion.div>
     </div>
   );
