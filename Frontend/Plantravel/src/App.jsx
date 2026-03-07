@@ -16,6 +16,7 @@ import CalendarPlanner from './pages/planner/CalendarPlanner';
 import BudgetInput from './pages/planner/BudgetInput';
 import ItineraryEditor from './pages/planner/ItineraryEditor';
 import UserManagement from './pages/admin/UserManagement';
+import MapPage from './pages/planner/MapPage';
 
 // Components
 import Sidebar from './components/Sidebar';

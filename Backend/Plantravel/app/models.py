@@ -59,8 +59,21 @@ class Trip(models.Model):
     destination = models.CharField(max_length=255)
     start_date = models.DateField()
     end_date = models.DateField()
+    budget = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    group_size = models.CharField(max_length=50, default="Solo Explorer")
     is_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.destination} ({self.user.username})"
+
+class ItineraryActivity(models.Model):
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='activities')
+    day_number = models.IntegerField()
+    time_of_day = models.CharField(max_length=50) # Morning, Afternoon, Evening
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    estimated_cost = models.CharField(max_length=100, blank=True)
+    
+    def __str__(self):
+        return f"Day {self.day_number} - {self.time_of_day}: {self.title}"

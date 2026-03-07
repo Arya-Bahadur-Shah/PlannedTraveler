@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,7 +42,10 @@ INSTALLED_APPS = [
     'corsheaders', 
     'rest_framework_simplejwt', # For JWT Auth
     'app',
+    'rest_framework_simplejwt.token_blacklist', # Feature 1: Blacklist tokens on logout
+    
 ]
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', 
@@ -80,8 +84,12 @@ WSGI_APPLICATION = 'Plantravel.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'plannedtraveler',
+        'USER': 'postgres',
+        'PASSWORD': 'ArYa@123', 
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
     }
 }
 
@@ -135,7 +143,17 @@ CORS_ALLOWED_ORIGINS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    # Ensure this is NOT set to 'IsAuthenticated' globally
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny', 
     )
 }
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# --- OPENAI API KEY ---
+OPENAI_API_KEY = "sk-your-openai-api-key-here"
+
 
 AUTH_USER_MODEL = 'app.User'

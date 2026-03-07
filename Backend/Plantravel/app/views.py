@@ -9,7 +9,14 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from .models import User, Post, Comment, Like, Report, Trip
 from rest_framework import serializers
-
+import json
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import Trip 
+from .models import ItineraryActivity
+import openai
 # --- 1. AUTHENTICATION LOGIC ---
 
 class MyTokenSerializer(TokenObtainPairSerializer):
@@ -87,6 +94,12 @@ class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    def get_permissions(self):
+
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
@@ -113,6 +126,83 @@ class ProfileViewSet(viewsets.ViewSet):
             "role": user.role,
             "followers_count": user.followers.count(),
             "following_count": user.following.count(),
-            "posts": list(posts),
+            "posts": PostSerializer(posts, many=True, context={'request': request}).data,
             "trips": list(trips)
         })
+    
+    openai.api_key = getattr(settings, 'OPENAI_API_KEY', '')
+
+class GenerateItineraryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data
+        destination = data.get('destination')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        budget = data.get('budget')
+        group_size = data.get('group_size')
+
+        if not all([destination, start_date, end_date, budget]):
+            return Response({"error": "Missing required fields"}, status=400)
+
+        # 1. Save Base Trip to DB
+        trip = Trip.objects.create(
+            user=request.user,
+            destination=destination,
+            start_date=start_date,
+            end_date=end_date,
+            budget=budget,
+            group_size=group_size
+        )
+
+        # 2. Construct OpenAI Prompt
+        prompt = f"""
+        Act as an expert travel planner. Create a day-by-day itinerary for a trip to {destination}.
+        Start Date: {start_date}, End Date: {end_date}.
+        Budget: Rs. {budget} (Currency: NPR).
+        Group: {group_size}.
+        
+        Output ONLY valid JSON in this exact format:
+        {{
+            "days": [
+                {{
+                    "day_number": 1,
+                    "activities": [
+                        {{"time_of_day": "Morning", "title": "...", "description": "...", "estimated_cost": "..."}},
+                        {{"time_of_day": "Afternoon", "title": "...", "description": "...", "estimated_cost": "..."}}
+                    ]
+                }}
+            ]
+        }}
+        """
+
+        try:
+            # 3. Call OpenAI
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo-1106", # Supports JSON mode
+                response_format={ "type": "json_object" },
+                messages=[{"role": "system", "content": prompt}]
+            )
+            
+            # 4. Parse AI Response
+            ai_data = json.loads(response.choices[0].message.content)
+            
+            # 5. Save Activities to Database
+            activities_to_create = []
+            for day in ai_data.get('days', []):
+                for act in day.get('activities', []):
+                    activities_to_create.append(ItineraryActivity(
+                        trip=trip,
+                        day_number=day['day_number'],
+                        time_of_day=act['time_of_day'],
+                        title=act['title'],
+                        description=act['description'],
+                        estimated_cost=act['estimated_cost']
+                    ))
+            ItineraryActivity.objects.bulk_create(activities_to_create)
+
+            return Response({"message": "Itinerary generated successfully", "trip_id": trip.id, "itinerary": ai_data}, status=201)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)

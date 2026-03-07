@@ -40,3 +40,4 @@ const BlogFeed = () => {
     </div>
   );
 };
+export default BlogFeed;
