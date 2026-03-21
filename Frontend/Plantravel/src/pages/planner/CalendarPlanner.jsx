@@ -1,10 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, MapPin, ArrowRight } from 'lucide-react';
+import { MapPin, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTrip } from '../../context/TripContext';
 
 const CalendarPlanner = () => {
   const navigate = useNavigate();
+  const { tripData, setTripData } = useTrip();
+
   return (
     <div className="p-8 md:p-16 max-w-4xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -15,17 +18,18 @@ const CalendarPlanner = () => {
           <div className="relative">
             <MapPin className="absolute left-5 top-6 opacity-30" />
             <input type="text" placeholder="Where to? (e.g., Mustang, Pokhara)" 
+              value={tripData.destination} onChange={e => setTripData({...tripData, destination: e.target.value})}
               className="w-full p-6 pl-14 rounded-2xl bg-black/5 outline-none border border-transparent focus:border-[var(--primary)] transition-all" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Departure</label>
-              <input type="date" className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
+              <input type="date" value={tripData.start_date} onChange={e => setTripData({...tripData, start_date: e.target.value})} className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Return</label>
-              <input type="date" className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
+              <input type="date" value={tripData.end_date} onChange={e => setTripData({...tripData, end_date: e.target.value})} className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
             </div>
           </div>
 
