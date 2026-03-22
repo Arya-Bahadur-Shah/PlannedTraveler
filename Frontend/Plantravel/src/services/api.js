@@ -8,7 +8,7 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token'); 
   
-  // Check if token exists and isn't just a string like "null" or "undefined"
+  // Safety check: Prevent React from sending literal "undefined" or "null" as strings
   if (token && token !== "undefined" && token !== "null") {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -21,17 +21,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If we get a 401, the token in storage is dead. 
-    // We should clear it so the app stops sending a broken token.
+    // If the backend says the token is dead (401), we clean up the frontend
     if (error.response && error.response.status === 401) {
       console.warn("Session expired or invalid token. Clearing credentials...");
+      
+      // Clear storage so the app knows the user is logged out
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       
-      // Optional: Redirect to login if they aren't on a public page
-      // if (!window.location.pathname.includes('/blogs')) {
-      //    window.location.href = '/login';
-      // }
+      // If we aren't already on the login page, force a reload to kick them out
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
