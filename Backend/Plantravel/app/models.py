@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.conf import settings
+
 
 # --- 1. USER IDENTITY MODEL ---
 class User(AbstractUser):
@@ -12,8 +12,6 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='USER')
     profile_picture = models.ImageField(upload_to='profiles/', null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True)
-    
-    # Social: Following logic
     following = models.ManyToManyField('self', symmetrical=False, related_name='followers', blank=True)
 
     def __str__(self):
@@ -29,8 +27,6 @@ class Post(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_blocked = models.BooleanField(default=False)
 
-    def __str__(self):
-        return self.title
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
@@ -53,7 +49,7 @@ class Report(models.Model):
     is_resolved = models.BooleanField(default=False)
 
 
-# --- 3. TRAVEL HISTORY MODEL (This fixes your error) ---
+# --- 3. TRAVEL HISTORY MODEL ---
 class Trip(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips')
     destination = models.CharField(max_length=255)
@@ -64,16 +60,12 @@ class Trip(models.Model):
     is_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.destination} ({self.user.username})"
-
 class ItineraryActivity(models.Model):
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='activities')
     day_number = models.IntegerField()
-    time_of_day = models.CharField(max_length=50) # Morning, Afternoon, Evening
+    time_of_day = models.CharField(max_length=50)
     title = models.CharField(max_length=255)
     description = models.TextField()
     estimated_cost = models.CharField(max_length=100, blank=True)
-    
-    def __str__(self):
-        return f"Day {self.day_number} - {self.time_of_day}: {self.title}"
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
