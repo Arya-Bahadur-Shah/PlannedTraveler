@@ -58,6 +58,7 @@ const Sidebar = () => {
         </div>
       </div>
 
+      {/* 4. Logout */}
       <div className="px-4">
         <button onClick={logout} className="w-full flex items-center gap-4 p-4 rounded-xl text-red-500 hover:bg-red-500/10 transition-all font-black text-[10px] uppercase tracking-widest">
           <LogOut size={20} /> <span className="hidden md:block">Exit Passport</span>
