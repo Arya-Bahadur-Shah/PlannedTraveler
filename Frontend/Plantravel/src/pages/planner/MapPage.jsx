@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Navigation, MapPin, ArrowLeft } from 'lucide-react';
+import { MapPin, ArrowLeft } from 'lucide-react';
 
 // Fix for default Leaflet marker icons not showing in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -24,7 +24,7 @@ const MapPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activities, setActivities] = useState([]);
-  const [center, setCenter] = useState([28.2096, 83.9856]); // Default: Pokhara, Nepal
+  const [center, setCenter] = useState([28.2096, 83.9856]); 
 
   useEffect(() => {
     // Get AI generated data passed from the Itinerary Editor
@@ -58,10 +58,7 @@ const MapPage = () => {
       <div className="flex-1 bg-slate-200 rounded-[3rem] relative overflow-hidden shadow-inner border-4 border-white z-0">
         <MapContainer center={center} zoom={12} className="w-full h-full">
           <ChangeView center={center} />
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
           
           {activities.map((act, index) => (
             <Marker key={index} position={[act.latitude, act.longitude]}>
@@ -89,8 +86,7 @@ const MapPage = () => {
             <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-[var(--primary)]/20 z-0"></div>
 
             {activities.length > 0 ? activities.map((act, i) => (
-              <div key={i} className="flex gap-4 items-start relative z-10 bg-[var(--card-theme)] p-2 rounded-xl cursor-pointer hover:bg-black/5 transition-all"
-                   onClick={() => setCenter([act.latitude, act.longitude])}>
+              <div key={i} className="flex gap-4 items-start relative z-10 bg-[var(--card-theme)] p-2 rounded-xl cursor-pointer hover:bg-black/5 transition-all" onClick={() => setCenter([act.latitude, act.longitude])}>
                 <div className="w-6 h-6 mt-1 rounded-full bg-[var(--primary)] text-white flex items-center justify-center shadow-md shadow-[var(--primary)]/30">
                   <MapPin size={12} />
                 </div>
