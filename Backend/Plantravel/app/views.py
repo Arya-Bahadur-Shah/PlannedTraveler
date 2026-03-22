@@ -89,15 +89,18 @@ class PostSerializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {'author': {'read_only': True}}
 
+# PlannedTraveler\Backend\Plantravel\app\views.py
+
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.filter(is_blocked=False)
+    # Added order_by so results are consistent
+    queryset = Post.objects.filter(is_blocked=False).order_by('-created_at')
     serializer_class = PostSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_permissions(self):
-
+        # 'list' and 'retrieve' (single post) are public
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
+        # Everything else (create, like, delete) requires login
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
@@ -106,8 +109,11 @@ class PostViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
         post = self.get_object()
+        # This will now correctly 401 if a guest tries to like, 
+        # because this action isn't 'list' or 'retrieve'
         like, created = Like.objects.get_or_create(user=request.user, post=post)
-        if not created: like.delete()
+        if not created: 
+            like.delete()
         return Response({'likes': post.likes.count()})
 
 # --- 4. PROFILE & HISTORY LOGIC ---
@@ -156,21 +162,28 @@ class GenerateItineraryView(APIView):
             group_size=group_size
         )
 
-        # 2. Construct OpenAI Prompt
+        
+       # 2. Construct OpenAI Prompt (UPDATED FOR MAPS)
         prompt = f"""
         Act as an expert travel planner. Create a day-by-day itinerary for a trip to {destination}.
         Start Date: {start_date}, End Date: {end_date}.
         Budget: Rs. {budget} (Currency: NPR).
         Group: {group_size}.
         
-        Output ONLY valid JSON in this exact format:
+        Output ONLY valid JSON in this exact format. You MUST provide real approximate latitude and longitude coordinates for mapping:
         {{
             "days": [
                 {{
                     "day_number": 1,
                     "activities": [
-                        {{"time_of_day": "Morning", "title": "...", "description": "...", "estimated_cost": "..."}},
-                        {{"time_of_day": "Afternoon", "title": "...", "description": "...", "estimated_cost": "..."}}
+                        {{
+                            "time_of_day": "Morning", 
+                            "title": "...", 
+                            "description": "...", 
+                            "estimated_cost": "...",
+                            "latitude": 28.2096,
+                            "longitude": 83.9856
+                        }}
                     ]
                 }}
             ]
@@ -178,17 +191,17 @@ class GenerateItineraryView(APIView):
         """
 
         try:
-            # 3. Call OpenAI
+             # 3. Call OpenAI
             response = openai.chat.completions.create(
-                model="gpt-3.5-turbo-1106", # Supports JSON mode
+                model="gpt-3.5-turbo-1106",
                 response_format={ "type": "json_object" },
                 messages=[{"role": "system", "content": prompt}]
             )
-            
+
             # 4. Parse AI Response
             ai_data = json.loads(response.choices[0].message.content)
             
-            # 5. Save Activities to Database
+            # 5. Save Activities to Database (UPDATED FOR MAPS)
             activities_to_create = []
             for day in ai_data.get('days', []):
                 for act in day.get('activities', []):
@@ -198,7 +211,9 @@ class GenerateItineraryView(APIView):
                         time_of_day=act['time_of_day'],
                         title=act['title'],
                         description=act['description'],
-                        estimated_cost=act['estimated_cost']
+                        estimated_cost=act['estimated_cost'],
+                        latitude=act.get('latitude'),    # <--- NEW
+                        longitude=act.get('longitude')   # <--- NEW
                     ))
             ItineraryActivity.objects.bulk_create(activities_to_create)
 
