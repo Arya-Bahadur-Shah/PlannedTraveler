@@ -8,7 +8,8 @@ export const TripProvider = ({ children }) => {
     start_date: '',
     end_date: '',
     group_size: 'Solo Explorer',
-    budget: ''
+    budget: '',
+    travel_vibes: [],   // e.g. ["nature", "aesthetic_cafe", "trendy"]
   });
 
   return (

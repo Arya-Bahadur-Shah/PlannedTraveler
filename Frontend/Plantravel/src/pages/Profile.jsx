@@ -7,10 +7,43 @@ const Profile = () => {
   const { currentTheme } = useTheme();
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState('blogs'); // blogs, history, social
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({ username: '', bio: '' });
+
+  const [profilePicFile, setProfilePicFile] = useState(null);
+
+  const fetchProfile = () => {
+    api.get('profile/me/').then(res => {
+      setProfile(res.data);
+      setEditData({ username: res.data.username, bio: res.data.bio || '' });
+    });
+  };
 
   useEffect(() => {
-    api.get('profile/me/').then(res => setProfile(res.data));
+    fetchProfile();
   }, []);
+
+  const handleUpdateProfile = async () => {
+    try {
+      if (profilePicFile) {
+        const formData = new FormData();
+        formData.append('username', editData.username);
+        formData.append('bio', editData.bio);
+        formData.append('profile_picture', profilePicFile);
+        await api.patch('profile/update_profile/', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        await api.patch('profile/update_profile/', editData);
+      }
+      setIsEditing(false);
+      setProfilePicFile(null);
+      fetchProfile();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update profile');
+    }
+  };
 
   if (!profile) return <div className="p-20 font-black animate-pulse">Synchronizing Aura...</div>;
 
@@ -18,13 +51,45 @@ const Profile = () => {
     <div className="p-8 md:p-16 max-w-6xl mx-auto">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row items-center gap-10 mb-16 bg-[var(--card-theme)] p-12 rounded-[4rem] shadow-xl border border-[var(--primary)]/10">
-        <div className="w-40 h-40 rounded-[3rem] bg-[var(--primary)]/20 flex items-center justify-center overflow-hidden border-4 border-[var(--primary)]">
-          {profile.profile_picture ? <img src={profile.profile_picture} /> : <User size={64} className="text-[var(--primary)]" />}
+        <div className="w-40 h-40 rounded-[3rem] bg-[var(--primary)]/20 flex items-center justify-center overflow-hidden border-4 border-[var(--primary)] relative">
+          {profile.profile_picture ? <img src={profile.profile_picture} className="w-full h-full object-cover" /> : <User size={64} className="text-[var(--primary)]" />}
+          {isEditing && (
+             <input 
+               type="file" 
+               accept="image/*" 
+               onChange={e => setProfilePicFile(e.target.files[0])} 
+               className="absolute inset-0 opacity-0 cursor-pointer z-10" 
+               title="Upload Profile Picture"
+             />
+           )}
+           {isEditing && <div className="absolute bottom-2 bg-black/50 text-white text-[10px] uppercase font-black px-3 py-1 rounded-full pointer-events-none">Change Pic</div>}
         </div>
         
         <div className="flex-1 text-center md:text-left">
-          <h1 className="text-5xl font-black tracking-tighter mb-2">{profile.username}</h1>
-          <p className="opacity-60 font-bold mb-6 max-w-md">{profile.bio || "No bio yet. Define your traveler soul in settings."}</p>
+          {isEditing ? (
+            <div className="mb-6 space-y-3">
+              <input 
+                className="w-full p-2 text-2xl font-black bg-transparent border-b-2 border-black/20 outline-none" 
+                value={editData.username} 
+                onChange={(e) => setEditData({...editData, username: e.target.value})} 
+              />
+              <textarea 
+                className="w-full p-2 bg-black/5 rounded-xl outline-none font-bold opacity-80" 
+                rows="2" 
+                value={editData.bio} 
+                onChange={(e) => setEditData({...editData, bio: e.target.value})} 
+              />
+              <div className="flex gap-2">
+                <button onClick={handleUpdateProfile} className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold text-sm">Save</button>
+                <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-black/10 rounded-lg font-bold text-sm">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-5xl font-black tracking-tighter mb-2">{profile.username}</h1>
+              <p className="opacity-60 font-bold mb-6 max-w-md">{profile.bio || "No bio yet. Define your traveler soul in settings."}</p>
+            </>
+          )}
           
           <div className="flex justify-center md:justify-start gap-8">
             <div className="text-center">
@@ -42,7 +107,7 @@ const Profile = () => {
           </div>
         </div>
         
-        <button className="p-4 rounded-2xl bg-black/5 hover:bg-black/10 transition-all">
+        <button onClick={() => setIsEditing(!isEditing)} className="p-4 rounded-2xl bg-black/5 hover:bg-black/10 transition-all">
           <SettingsIcon size={20} />
         </button>
       </div>
