@@ -1,41 +1,77 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext';
+import MapSearchBox from '../../components/Map/MapSearchBox';
+import DateRangePicker from '../../components/Calendar/DateRangePicker';
 
 const CalendarPlanner = () => {
   const navigate = useNavigate();
   const { tripData, setTripData } = useTrip();
 
+  const handleSelectLocation = (location) => {
+    setTripData({ ...tripData, destination: location.name });
+  };
+
+  const handleDateChange = (ranges) => {
+    setTripData({
+      ...tripData,
+      start_date: ranges.startDate,
+      end_date: ranges.endDate
+    });
+  };
+
+  const canProceed = tripData.destination && tripData.start_date && tripData.end_date;
+
   return (
-    <div className="p-8 md:p-16 max-w-4xl mx-auto">
+    <div className="p-8 md:p-16 max-w-5xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-5xl font-black tracking-tight mb-4" style={{ color: 'var(--text-theme)' }}>Start Your Escape</h1>
-        <p className="opacity-60 font-bold mb-12">Define your destination and duration to sync with the local Aura.</p>
+        {/* Step indicator */}
+        <span className="inline-block mb-4 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest bg-[var(--primary)]/10 text-[var(--primary)]">
+          Step 1 of 3 — Destination & Dates
+        </span>
 
-        <div className="space-y-6 bg-[var(--card-theme)] p-10 rounded-[3rem] border border-[var(--primary)]/10 shadow-2xl">
-          <div className="relative">
-            <MapPin className="absolute left-5 top-6 opacity-30" />
-            <input type="text" placeholder="Where to? (e.g., Mustang, Pokhara)" 
-              value={tripData.destination} onChange={e => setTripData({...tripData, destination: e.target.value})}
-              className="w-full p-6 pl-14 rounded-2xl bg-black/5 outline-none border border-transparent focus:border-[var(--primary)] transition-all" />
+        <h1 className="text-5xl font-black tracking-tight mb-3" style={{ color: 'var(--text-theme)' }}>
+          Start Your Escape
+        </h1>
+        <p className="opacity-60 font-bold mb-12">
+          Define your destination and travel window. Then we'll tune the AI to your vibe.
+        </p>
+
+        <div className="space-y-8">
+          {/* Map Input */}
+          <div className="bg-[var(--card-theme)] p-8 rounded-[3rem] border border-[var(--primary)]/10 shadow-2xl">
+            <h2 className="text-2xl font-black mb-6">Where would you like to explore?</h2>
+            <MapSearchBox destination={tripData.destination} onSelect={handleSelectLocation} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Departure</label>
-              <input type="date" value={tripData.start_date} onChange={e => setTripData({...tripData, start_date: e.target.value})} className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Return</label>
-              <input type="date" value={tripData.end_date} onChange={e => setTripData({...tripData, end_date: e.target.value})} className="w-full p-5 rounded-2xl bg-black/5 outline-none" />
-            </div>
+          {/* Calendar Grid Input */}
+          <div className="bg-[var(--card-theme)] p-8 rounded-[3rem] border border-[var(--primary)]/10 shadow-2xl">
+            <h2 className="text-2xl font-black mb-6">Select your travel dates</h2>
+            <DateRangePicker
+              startDate={tripData.start_date}
+              endDate={tripData.end_date}
+              onChange={handleDateChange}
+            />
           </div>
 
-          <button onClick={() => navigate('/budget')} className="w-full py-6 rounded-3xl bg-[var(--primary)] text-white font-black text-xl flex items-center justify-center gap-3 hover:scale-[1.02] transition-all shadow-lg shadow-[var(--primary)]/20">
-            Set Budget <ArrowRight />
-          </button>
+          {/* Proceed — now goes to /vibe */}
+          <motion.button
+            whileHover={{ scale: canProceed ? 1.02 : 1 }}
+            whileTap={{ scale: canProceed ? 0.98 : 1 }}
+            onClick={() => canProceed && navigate('/vibe')}
+            disabled={!canProceed}
+            className="w-full py-6 rounded-3xl font-black text-xl flex items-center justify-center gap-3 text-white transition-all shadow-2xl disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: canProceed
+                ? 'linear-gradient(135deg, var(--primary), #7c3aed)'
+                : 'rgba(0,0,0,0.15)'
+            }}
+          >
+            {canProceed ? 'Choose Your Vibe' : 'Select destination & dates first'}
+            {canProceed && <ArrowRight size={22} />}
+          </motion.button>
         </div>
       </motion.div>
     </div>

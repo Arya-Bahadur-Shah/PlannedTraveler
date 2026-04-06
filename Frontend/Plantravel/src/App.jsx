@@ -12,6 +12,7 @@ import Profile from './pages/Profile';
 import BlogFeed from './pages/community/BlogFeed';
 import CreateBlog from './pages/community/CreateBlog';
 import CalendarPlanner from './pages/planner/CalendarPlanner';
+import VibeSelector from './pages/planner/VibeSelector';
 import BudgetInput from './pages/planner/BudgetInput';
 import ItineraryEditor from './pages/planner/ItineraryEditor';
 import UserManagement from './pages/admin/UserManagement';
@@ -33,9 +34,10 @@ const App = () => {
   return (
     <div className="flex min-h-screen">
       {showSidebar && <Sidebar />}
-      
+
       <main className={`flex-1 w-full transition-all duration-500 ${showSidebar ? 'pl-20 md:pl-64' : ''}`}>
         <Routes>
+          {/* Public */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -43,14 +45,19 @@ const App = () => {
           <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
           <Route path="/blogs" element={<BlogFeed />} />
 
+          {/* Protected — all users */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/planner" element={<ProtectedRoute allowedRoles={['USER']}><CalendarPlanner /></ProtectedRoute>} />
-          <Route path="/budget" element={<ProtectedRoute allowedRoles={['USER']}><BudgetInput /></ProtectedRoute>} />
-          <Route path="/itinerary-editor" element={<ProtectedRoute allowedRoles={['USER']}><ItineraryEditor /></ProtectedRoute>} />
-          <Route path="/map" element={<ProtectedRoute allowedRoles={['USER']}><MapPage /></ProtectedRoute>} />
           <Route path="/create-blog" element={<ProtectedRoute><CreateBlog /></ProtectedRoute>} />
 
+          {/* Protected — planner flow (Step 1 → 2 → 3 → result) */}
+          <Route path="/planner" element={<ProtectedRoute allowedRoles={['USER']}><CalendarPlanner /></ProtectedRoute>} />
+          <Route path="/vibe"    element={<ProtectedRoute allowedRoles={['USER']}><VibeSelector /></ProtectedRoute>} />
+          <Route path="/budget"  element={<ProtectedRoute allowedRoles={['USER']}><BudgetInput /></ProtectedRoute>} />
+          <Route path="/itinerary-editor" element={<ProtectedRoute allowedRoles={['USER']}><ItineraryEditor /></ProtectedRoute>} />
+          <Route path="/map"     element={<ProtectedRoute allowedRoles={['USER']}><MapPage /></ProtectedRoute>} />
+
+          {/* Admin */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><UserManagement /></ProtectedRoute>} />
           <Route path="/admin/moderation" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}><Moderation /></ProtectedRoute>} />
 
