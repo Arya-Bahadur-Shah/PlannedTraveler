@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from app.views import (
     LoginView, RegisterView, PostViewSet, CommentViewSet, ReportViewSet, UserViewSet,
-    ProfileViewSet, GenerateItineraryView, AdminStatsView,
+    ProfileViewSet, GenerateItineraryView, GenerateVibeDestinationView, AdminStatsView,
     request_password_reset, reset_password_confirm
 )
 
@@ -22,10 +22,13 @@ urlpatterns = [
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/password-reset/', request_password_reset),
     path('api/reset-confirm/<str:uidb64>/<str:token>/', reset_password_confirm),
-    
-    # AI & Admin ENDPOINTS
+
+    # AI & TRIP ENDPOINTS
     path('api/trips/generate-itinerary/', GenerateItineraryView.as_view(), name='generate-itinerary'),
+    path('api/trips/generate-vibe/', GenerateVibeDestinationView.as_view(), name='generate-vibe'),
+
+    # ADMIN ENDPOINTS
     path('api/admin/stats/', AdminStatsView.as_view(), name='admin-stats'),
-    
+
     path('api/', include(router.urls)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
