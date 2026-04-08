@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
-import { User, MapPin, BookOpen, Users, History, Settings as SettingsIcon } from 'lucide-react';
+import { User, MapPin, BookOpen, Users, History, Settings as SettingsIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import ExpenseTracker from '../components/Expense/ExpenseTracker';
 
 const Profile = () => {
   const { currentTheme } = useTheme();
@@ -9,6 +10,7 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('blogs'); // blogs, history, social
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ username: '', bio: '' });
+  const [expandedTripId, setExpandedTripId] = useState(null);
 
   const [profilePicFile, setProfilePicFile] = useState(null);
 
@@ -139,15 +141,32 @@ const Profile = () => {
         ))}
 
         {activeTab === 'history' && profile.trips.map(trip => (
-          <div key={trip.id} className="p-8 rounded-[2.5rem] bg-[var(--card-theme)] border-l-8 border-[var(--primary)] flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-black uppercase opacity-40 mb-1">Destination</p>
-              <h4 className="text-2xl font-black">{trip.destination}</h4>
+          <div key={trip.id} className="flex flex-col gap-2">
+            <div 
+              onClick={() => setExpandedTripId(expandedTripId === trip.id ? null : trip.id)}
+              className="p-8 rounded-[2.5rem] bg-[var(--card-theme)] border-l-8 border-[var(--primary)] flex justify-between items-center cursor-pointer hover:shadow-md transition-all"
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase opacity-40 mb-1">Destination</p>
+                <h4 className="text-2xl font-black">{trip.destination}</h4>
+              </div>
+              <div className="text-right flex items-center gap-4">
+                <div>
+                  <p className="font-bold opacity-60 text-sm">{trip.start_date}</p>
+                  <span className={`text-[9px] font-black bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-1 rounded uppercase`}>
+                    {trip.is_completed ? 'COMPLETED' : 'PLANNED'}
+                  </span>
+                </div>
+                {expandedTripId === trip.id ? <ChevronUp className="text-[var(--primary)]" /> : <ChevronDown className="opacity-40" />}
+              </div>
             </div>
-            <div className="text-right">
-              <p className="font-bold opacity-60 text-sm">{trip.start_date}</p>
-              <span className="text-[9px] font-black bg-emerald-500/10 text-emerald-600 px-2 py-1 rounded">COMPLETED</span>
-            </div>
+            
+            {/* Expanded section for Expense Tracker */}
+            {expandedTripId === trip.id && (
+              <div className="ml-4 md:ml-12 mb-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                <ExpenseTracker trip={trip} />
+              </div>
+            )}
           </div>
         ))}
         
