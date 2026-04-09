@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { NavLink, Link } from 'react-router-dom';
-import { Calendar, Wallet, LogOut, ShieldCheck, Users, LayoutDashboard, BookOpen, Sparkles, Sun, Moon, User } from 'lucide-react';
+import { Calendar, Wallet, LogOut, ShieldCheck, Users, LayoutDashboard, BookOpen, Sparkles, Sun, Moon, User, Activity } from 'lucide-react';
 
 const Sidebar = () => {
   const { user, logout } = useAuth();
@@ -13,6 +13,7 @@ const Sidebar = () => {
     { icon: <BookOpen size={20}/>, label: 'Feed', path: '/blogs' },
     { icon: <Calendar size={20}/>, label: 'Planner', path: '/planner' },
     { icon: <Wallet size={20}/>, label: 'Budget', path: '/budget' },
+    { icon: <Activity size={20}/>, label: 'Analytics', path: '/analytics' },
   ];
 
   const adminLinks = [
