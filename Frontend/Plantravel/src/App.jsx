@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import BlogFeed from './pages/community/BlogFeed';
 import CreateBlog from './pages/community/CreateBlog';
 import CalendarPlanner from './pages/planner/CalendarPlanner';
@@ -21,6 +22,7 @@ import Moderation from './pages/admin/Moderation';
 
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
+import LiveNotifications from './components/LiveNotifications';
 
 const App = () => {
   const { user, loading } = useAuth();
@@ -34,6 +36,7 @@ const App = () => {
   return (
     <div className="flex min-h-screen">
       {showSidebar && <Sidebar />}
+      {user && <LiveNotifications />}
 
       <main className={`flex-1 w-full transition-all duration-500 ${showSidebar ? 'pl-20 md:pl-64' : ''}`}>
         <Routes>
@@ -48,6 +51,7 @@ const App = () => {
           {/* Protected — all users */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
           <Route path="/create-blog" element={<ProtectedRoute><CreateBlog /></ProtectedRoute>} />
 
           {/* Protected — planner flow (Step 1 → 2 → 3 → result) */}
