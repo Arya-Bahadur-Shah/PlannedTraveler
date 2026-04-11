@@ -1,6 +1,59 @@
+"""
+PlannedTraveler — Django REST Framework API Views
+==================================================
+This module contains all API view classes and functions powering the
+PlannedTraveler travel planning platform.
+
+View Groups:
+  AUTH:
+    - MyTokenSerializer / LoginView   — JWT login with role claim injection
+    - RegisterView                    — User registration
+    - request_password_reset          — Send password reset email
+    - reset_password_confirm          — Validate token and update password
+
+  COMMUNITY:
+    - PostViewSet        — Blog CRUD, search, sort, like (+ WS like notification)
+    - CommentViewSet     — Comments on posts
+    - ReportViewSet      — User post reports (admin moderation queue)
+
+  SOCIAL:
+    - UserViewSet        — Follow/Unfollow (+ real-time WS follow notification)
+
+  PROFILE:
+    - ProfileViewSet     — GET /profile/me, PATCH /profile/update_profile
+
+  TRIPS & ITINERARY:
+    - TripViewSet            — CRUD for user trips, toggle_share public link
+    - PublicTripView         — Unauthenticated read-only shared itinerary
+    - ActivityViewSet        — Inline edit/delete of AI-generated activities
+    - GenerateItineraryView  — AI itinerary generation via Ollama + weather fallback
+    - GenerateVibeDestinationView — Vibe-based destination suggestions
+
+  EXPENSES:
+    - ExpenseViewSet     — Track spending per trip with budget alert notifications
+
+  NOTIFICATIONS:
+    - NotificationViewSet — List, mark-as-read, delete notification records
+
+  VISION & AI:
+    - ImageRecommendationView — Analyze uploaded image via Ollama llava vision model
+
+  ANALYTICS & ADMIN:
+    - AnalyticsView      — User-level stats (trips, spending, trend data)
+    - AdminStatsView     — Platform-wide stats for admin dashboards
+
+WebSocket Notifications:
+  Real-time push events are sent via Django Channels group_send() to
+  individual user channels (user_{id}). Triggered by:
+    - Post liked       → notification to post author
+    - User followed    → notification to followed user
+    - Budget threshold → notification to trip owner
+"""
+
 import json
 import requests
 import traceback
+import base64
 from datetime import datetime, timedelta, date
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -13,12 +66,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User, Post, Comment, Like, Report, Trip, ItineraryActivity
+from .models import User, Post, Comment, Like, Report, Trip, ItineraryActivity, Expense, Notification
 from .serializers import (
     UserSerializer, RegisterSerializer, PostSerializer,
-    CommentSerializer, ReportSerializer, TripSerializer
+    CommentSerializer, ReportSerializer, TripSerializer, ExpenseSerializer, NotificationSerializer, ActivitySerializer
 )
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from rest_framework.permissions import AllowAny as AllowPublic
+
+from django.db.models import Sum, Count, Q
+from django.db.models.functions import TruncMonth
 
 # ─────────────────────────────────────────────────────────────
 # AUTH VIEWS
@@ -87,8 +146,23 @@ def reset_password_confirm(request, uidb64, token):
 # ─────────────────────────────────────────────────────────────
 
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.filter(is_blocked=False).order_by('-created_at')
     serializer_class = PostSerializer
+
+    def get_queryset(self):
+        qs = Post.objects.filter(is_blocked=False)
+        search = self.request.query_params.get('search', '').strip()
+        sort = self.request.query_params.get('sort', 'latest')
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search) |
+                Q(content__icontains=search) |
+                Q(author__username__icontains=search)
+            )
+        if sort == 'popular':
+            qs = qs.annotate(like_count=Count('likes')).order_by('-like_count')
+        else:
+            qs = qs.order_by('-created_at')
+        return qs
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -100,10 +174,33 @@ class PostViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
+        """Toggle a like on a post and push a real-time WS notification to the author."""
         post = self.get_object()
-        like, created = Like.objects.get_or_create(user=request.user, post=post)
+        like_obj, created = Like.objects.get_or_create(user=request.user, post=post)
         if not created:
-            like.delete()
+            like_obj.delete()
+        else:
+            # Only push a notification when liking (not unliking)
+            if post.author != request.user:
+                notif = Notification.objects.create(
+                    user=post.author,
+                    title=f"{request.user.username} liked your post",
+                    message=f'"{post.title}" received a new like from {request.user.username}.',
+                    notification_type='like'
+                )
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{post.author.id}",
+                    {
+                        "type": "send_notification",
+                        "id": notif.id,
+                        "title": notif.title,
+                        "message": notif.message,
+                        "notification_type": "like",
+                        "is_read": False,
+                        "created_at": str(notif.created_at),
+                    }
+                )
         return Response({'likes': post.likes.count()})
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -121,6 +218,63 @@ class ReportViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(reported_by=self.request.user)
+
+
+# ─────────────────────────────────────────────────────────────
+# TRIP VIEWSET WITH PUBLIC SHARE TOGGLE
+# ─────────────────────────────────────────────────────────────
+
+class TripViewSet(viewsets.ModelViewSet):
+    """CRUD operations for user trips. Includes toggle_share for public link sharing."""
+    serializer_class = TripSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Trip.objects.filter(user=self.request.user).order_by('-created_at')
+
+    @action(detail=True, methods=['post'])
+    def toggle_share(self, request, pk=None):
+        """Toggle the is_public flag on a trip to enable/disable public sharing."""
+        trip = self.get_object()
+        trip.is_public = not trip.is_public
+        trip.save()
+        return Response({'is_public': trip.is_public, 'trip_id': trip.id})
+
+
+class PublicTripView(APIView):
+    """Read-only public endpoint for viewing a shared itinerary without authentication."""
+    permission_classes = [AllowPublic]
+
+    def get(self, request, pk):
+        try:
+            trip = Trip.objects.get(pk=pk, is_public=True)
+        except Trip.DoesNotExist:
+            return Response({'error': 'This itinerary is not publicly shared or does not exist.'}, status=404)
+
+        activities_by_day = {}
+        for act in trip.activities.all().order_by('day_number', 'id'):
+            day = act.day_number
+            if day not in activities_by_day:
+                activities_by_day[day] = []
+            activities_by_day[day].append({
+                'id': act.id,
+                'time_of_day': act.time_of_day,
+                'title': act.title,
+                'description': act.description,
+                'estimated_cost': act.estimated_cost,
+                'latitude': act.latitude,
+                'longitude': act.longitude,
+            })
+
+        days = [{'day_number': k, 'activities': v} for k, v in sorted(activities_by_day.items())]
+        return Response({
+            'destination': trip.destination,
+            'start_date': str(trip.start_date),
+            'end_date': str(trip.end_date),
+            'group_size': trip.group_size,
+            'total_days': len(days),
+            'days': days,
+        })
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
@@ -158,6 +312,27 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"status": "unfollowed", "followers": target_user.followers.count()})
         else:
             request.user.following.add(target_user)
+            # Create a persistent Notification record for the followed user
+            notif = Notification.objects.create(
+                user=target_user,
+                title=f"{request.user.username} followed you",
+                message=f"{request.user.username} is now following your travel stories.",
+                notification_type='follow'
+            )
+            # Push real-time WebSocket notification to the target user's channel group
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"user_{target_user.id}",
+                {
+                    "type": "send_notification",
+                    "id": notif.id,
+                    "title": notif.title,
+                    "message": notif.message,
+                    "notification_type": "follow",
+                    "is_read": False,
+                    "created_at": str(notif.created_at),
+                }
+            )
             return Response({"status": "followed", "followers": target_user.followers.count()})
 
 class ProfileViewSet(viewsets.ViewSet):
@@ -206,6 +381,168 @@ class AdminStatsView(APIView):
             "pending_reports": Report.objects.filter(is_resolved=False).count()
         })
 
+class AnalyticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        trips = Trip.objects.filter(user=user)
+        total_trips = trips.count()
+        completed_trips = trips.filter(is_completed=True).count()
+        total_spent = Expense.objects.filter(trip__user=user).aggregate(Sum('amount'))['amount__sum'] or 0
+
+        # Category breakdown
+        expenses = Expense.objects.filter(trip__user=user).values('category').annotate(total=Sum('amount')).order_by('-total')
+        category_data = [{"name": e['category'], "value": float(e['total'])} for e in expenses]
+
+        # Monthly trips
+        monthly_trips = trips.annotate(month=TruncMonth('start_date')).values('month').annotate(total=Count('id')).order_by('month')
+        trend_data = [{"month": str(m['month'].strftime("%b %Y")) if m['month'] else "Unknown", "trips": m['total']} for m in monthly_trips]
+
+        return Response({
+            "total_trips": total_trips,
+            "completed_trips": completed_trips,
+            "total_spent": float(total_spent),
+            "category_data": category_data,
+            "trend_data": trend_data
+        })
+
+class ActivityViewSet(viewsets.ModelViewSet):
+    serializer_class = ActivitySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ItineraryActivity.objects.filter(trip__user=self.request.user).order_by('day_number', 'id')
+
+    def perform_create(self, serializer):
+        trip = serializer.validated_data.get('trip')
+        if trip.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not own this trip.")
+        serializer.save()
+
+class ExpenseViewSet(viewsets.ModelViewSet):
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Expense.objects.filter(trip__user=self.request.user).order_by('-date')
+
+    def perform_create(self, serializer):
+        trip = serializer.validated_data.get('trip')
+        if trip.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not own this trip.")
+        
+        expense = serializer.save()
+
+        # Check total budget manually to trigger notification
+        total_expenses = sum(e.amount for e in trip.expenses.all())
+        budget = trip.budget or 0
+        
+        if budget > 0:
+            percentage = (total_expenses / budget) * 100
+            alert_msg = None
+            alert_type = 'info'
+            title = 'Expense Logged'
+
+            # Define alert threshold rules
+            if percentage >= 100:
+                alert_msg = f"Alert: You have exceeded your budget for {trip.destination}!"
+                alert_type = 'danger'
+                title = 'Budget Exceeded'
+            elif percentage >= 85:
+                # To prevent spamming, we could check if it was previously below 85, but for demo we just send
+                alert_msg = f"Warning: You are nearing your budget limit for {trip.destination}."
+                alert_type = 'warning'
+                title = 'Budget Warning'
+
+            if alert_msg:
+                # Save notification to DB
+                Notification.objects.create(
+                    user=self.request.user,
+                    title=title,
+                    message=alert_msg,
+                    notification_type=alert_type
+                )
+                
+                # Broadcast via WebSocket
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{self.request.user.id}",
+                    {
+                        "type": "send_notification",
+                        "message": alert_msg,
+                        "type_id": alert_type,
+                        "title": title
+                    }
+                )
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notif = self.get_object()
+        notif.is_read = True
+        notif.save()
+        return Response({'status': 'marked as read'})
+
+
+class ImageRecommendationView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        image = request.FILES.get('image')
+        if not image:
+            return Response({"error": "No image provided"}, status=400)
+            
+        try:
+            # Base64 encode the uploaded image
+            image_bytes = image.read()
+            b64_img = base64.b64encode(image_bytes).decode('utf-8')
+            
+            payload = {
+                "model": "llava",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "You are an expert travel assistant. Analyze this image and recommend exactly 3 concise travel activities starting with verbs. Identify the main travel 'vibe' (e.g. nature, aesthetic_cafe, trendy, adventure, cultural, beach). Identify the destination it looks most like in Nepal. Reply ONLY in strict JSON format: {\"detected_vibe\": \"vibe\", \"destination_match\": \"location\", \"reason\": \"short reason\", \"suggested_activities\": [\"activity 1\", \"activity 2\", \"activity 3\"]}.",
+                        "images": [b64_img]
+                    }
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.3
+                }
+            }
+            
+            ollama_url = "http://localhost:11434/api/chat"
+            res = requests.post(ollama_url, json=payload, timeout=30.0)
+            res.raise_for_status()
+            
+            # Ensure proper JSON parsing from Ollama
+            content = res.json().get("message", {}).get("content", "")
+            if "```json" in content:
+                content = content.replace("```json", "").replace("```", "").strip()
+            if "```" in content:
+                content = content.replace("```", "").strip()
+
+            parsed_data = json.loads(content)
+            return Response(parsed_data)
+        except Exception as e:
+            print(f"Vision API failed: {e}")
+            # Smart fallback
+            return Response({
+                "detected_vibe": "nature",
+                "destination_match": "Annapurna Mountains",
+                "reason": "The system generated a fallback because the vision model (llava) could not be reached.",
+                "suggested_activities": ["Sunrise view", "Mountain trek", "Tea house visit"]
+            })
 
 # ─────────────────────────────────────────────────────────────
 # WEATHER HELPER  (Open-Meteo – no API key required)
@@ -408,6 +745,11 @@ class GenerateItineraryView(APIView):
             vibe_instructions = _get_vibe_instructions(travel_vibes)
             vibe_label = ", ".join(travel_vibes) if travel_vibes else "Balanced"
 
+            # ── Analytics: Past Trips context ────────
+            past_trips = Trip.objects.filter(user=request.user, is_completed=True)
+            past_destinations = [t.destination for t in past_trips if t.destination != destination]
+            past_trips_ctx = f"The user has previously visited: {', '.join(set(past_destinations))}. Ensure this itinerary gives a slightly different experience." if past_destinations else "This is the user's first trip documented here."
+
             # ── Construct advanced prompt ───────────────────────
             prompt = f"""
 You are an elite travel concierge and local expert for Nepal with 20 years of experience.
@@ -419,6 +761,7 @@ TRIP DETAILS:
 - Total Budget: NPR {budget}
 - Group Type: {group_size}
 - Travel Vibe/Style: {vibe_label}
+- Travel History Context: {past_trips_ctx}
 
 WEATHER FORECAST (CRITICAL — plan activities around this):
 {weather_section}
@@ -532,20 +875,19 @@ OUTPUT — return ONLY valid JSON, no markdown fences, no extra text:
                 )
 
             # ── Save activities to database ─────────────────────
-            activities_to_create = []
             for day in ai_data.get('days', []):
                 for act in day.get('activities', []):
-                    activities_to_create.append(ItineraryActivity(
+                    db_act = ItineraryActivity.objects.create(
                         trip=trip,
-                        day_number=day['day_number'],
+                        day_number=day.get('day_number', 1),
                         time_of_day=act.get('time_of_day', 'Morning'),
                         title=act.get('title', ''),
                         description=act.get('description', ''),
                         estimated_cost=str(act.get('estimated_cost', '')),
                         latitude=act.get('latitude'),
                         longitude=act.get('longitude')
-                    ))
-            ItineraryActivity.objects.bulk_create(activities_to_create)
+                    )
+                    act['id'] = db_act.id  # Inject DB ID into JSON for frontend edit capability
 
             return Response({
                 "message": "Itinerary generated successfully",

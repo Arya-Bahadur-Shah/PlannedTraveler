@@ -51,6 +51,7 @@ class Report(models.Model):
 
 # --- 3. TRAVEL HISTORY MODEL ---
 class Trip(models.Model):
+    """Represents a travel itinerary saved by a user."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips')
     destination = models.CharField(max_length=255)
     start_date = models.DateField()
@@ -58,6 +59,8 @@ class Trip(models.Model):
     budget = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     group_size = models.CharField(max_length=50, default="Solo Explorer")
     is_completed = models.BooleanField(default=False)
+    # Allows trips to be shared via a public read-only link
+    is_public = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 class ItineraryActivity(models.Model):
@@ -69,3 +72,31 @@ class ItineraryActivity(models.Model):
     estimated_cost = models.CharField(max_length=100, blank=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
+
+class Expense(models.Model):
+    CATEGORY_CHOICES = (
+        ('FOOD', 'Food & Dining'),
+        ('TRANSPORT', 'Transportation'),
+        ('ACCOMMODATION', 'Accommodation'),
+        ('ACTIVITIES', 'Activities & Tours'),
+        ('MISC', 'Miscellaneous'),
+    )
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='expenses')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='MISC')
+    description = models.CharField(max_length=255, blank=True)
+    date = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.category}: {self.amount} for {self.trip.destination}"
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    notification_type = models.CharField(max_length=50, default='info')
+
+    def __str__(self):
+        return f"To {self.user.username}: {self.title}"
