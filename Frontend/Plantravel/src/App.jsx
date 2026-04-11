@@ -19,6 +19,7 @@ import ItineraryEditor from './pages/planner/ItineraryEditor';
 import UserManagement from './pages/admin/UserManagement';
 import MapPage from './pages/planner/MapPage';
 import Moderation from './pages/admin/Moderation';
+import SharedItinerary from './pages/SharedItinerary';
 
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -31,7 +32,9 @@ const App = () => {
   if (loading) return null;
 
   const noSidebarPages = ['/', '/login', '/register', '/forgot-password'];
-  const showSidebar = user && !noSidebarPages.includes(location.pathname) && !location.pathname.startsWith('/reset-password');
+  const showSidebar = user && !noSidebarPages.includes(location.pathname)
+    && !location.pathname.startsWith('/reset-password')
+    && !location.pathname.startsWith('/share');
 
   return (
     <div className="flex min-h-screen">
@@ -47,6 +50,8 @@ const App = () => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
           <Route path="/blogs" element={<BlogFeed />} />
+          {/* Public shared itinerary — no auth required */}
+          <Route path="/share/:id" element={<SharedItinerary />} />
 
           {/* Protected — all users */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

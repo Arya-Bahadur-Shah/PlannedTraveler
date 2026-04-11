@@ -1,20 +1,12 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import Sidebar from '../components/Sidebar';
 import TravelerDashboard from './TravelerDashboard';
 import AdminDashboard from './AdminDashboard';
 
+// Note: Sidebar and LiveNotifications are rendered by App.jsx — no need to duplicate here.
 const Dashboard = () => {
   const { user } = useAuth();
-
-  return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 relative overflow-hidden">
-        {user?.role === 'USER' ? <TravelerDashboard /> : <AdminDashboard />}
-      </main>
-    </div>
-  );
+  return user?.role === 'USER' ? <TravelerDashboard /> : <AdminDashboard />;
 };
 
 export default Dashboard;

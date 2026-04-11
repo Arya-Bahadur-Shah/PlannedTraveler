@@ -1,5 +1,20 @@
+/**
+ * @file api.js
+ * @description Central Axios instance for all API calls in PlannedTraveler.
+ *
+ * Configured with:
+ * - baseURL pointing to the Django REST backend (http://127.0.0.1:8000/api/)
+ * - REQUEST interceptor: Attaches the stored JWT Bearer token to every request.
+ *   Safely guards against storing literal "undefined" or "null" strings.
+ * - RESPONSE interceptor: Automatically clears auth state and redirects to /login
+ *   when the backend returns a 401 Unauthorized (expired or invalid token).
+ *
+ * Usage: `import api from '../services/api';`
+ */
+
 import axios from 'axios';
 
+/** Preconfigured Axios instance pointed at the backend API root */
 const api = axios.create({
   baseURL: 'http://127.0.0.1:8000/api/',
 });

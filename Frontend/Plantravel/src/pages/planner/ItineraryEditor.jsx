@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sun, Sunset, Moon, Map as MapIcon, CloudRain, Cloud, CloudSnow,
   Utensils, Coffee, TreePine, Tent, Landmark, ShoppingBag,
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Compass
+  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Compass, Edit3, Trash2, Save, X, Share2, Link, CheckCheck
 } from 'lucide-react';
+import api from '../../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -98,9 +99,16 @@ const BudgetTracker = ({ days }) => {
 
 // ── Activity Card ─────────────────────────────────────────────
 
-const ActivityCard = ({ item }) => {
+const ActivityCard = ({ item, dayNumber, onUpdate, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState(item);
   const isRestaurant = item.is_restaurant || ['restaurant', 'cafe'].includes(item.activity_type?.toLowerCase());
+
+  const handleSave = () => {
+    onUpdate(dayNumber, editForm);
+    setIsEditing(false);
+  };
 
   return (
     <motion.div
@@ -119,65 +127,93 @@ const ActivityCard = ({ item }) => {
           {getTimeIcon(item.time_of_day)}
         </div>
 
-        <div className="flex-1 min-w-0">
-          {/* Time slot + badges */}
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {item.time_slot && (
-              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--primary)]">
-                {item.time_slot}
-              </span>
-            )}
-            {item.activity_type && (
-              <span className={`flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${getActivityBadge(item.activity_type)}`}>
-                {getActivityIcon(item.activity_type)}
-                {item.activity_type.replace('_', ' ')}
-              </span>
-            )}
-            {item.indoor && (
-              <span className="text-[10px] bg-violet-100 text-violet-600 font-black px-2 py-0.5 rounded-full uppercase">
-                🏠 Indoor
-              </span>
-            )}
-          </div>
-
-          <h4 className="font-black text-base mb-1 group-hover:text-[var(--primary)] transition-colors leading-tight">
-            {item.title}
-          </h4>
-
-          <p className={`text-sm opacity-60 leading-relaxed ${expanded ? '' : 'line-clamp-2'}`}>
-            {item.description}
-          </p>
-
-          {/* Extra details for restaurants/cafes */}
-          {(item.must_try || item.cuisine_or_category) && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {item.cuisine_or_category && (
-                <span className="text-xs font-bold opacity-50">🍽️ {item.cuisine_or_category}</span>
-              )}
-              {item.must_try && (
-                <span className="text-xs font-black text-emerald-600">⭐ Try: {item.must_try}</span>
-              )}
+        <div className="flex-1 min-w-0 pr-6 relative">
+          {(!isEditing) && (
+            <div className="absolute top-0 right-0 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => setIsEditing(true)} className="p-1.5 hover:bg-black/5 rounded-lg text-black/40 hover:text-[var(--primary)] transition-colors"><Edit3 size={14} /></button>
+              <button onClick={() => onDelete(dayNumber, item.id)} className="p-1.5 hover:bg-black/5 rounded-lg text-black/40 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
             </div>
           )}
 
-          {item.transport_tip && (
-            <p className="mt-2 text-xs font-bold opacity-40">🚌 {item.transport_tip}</p>
-          )}
+          {isEditing ? (
+            <div className="space-y-3 mt-2 pr-2">
+              <input 
+                className="w-full text-base font-black px-3 py-2 bg-black/5 rounded-lg border-2 border-transparent focus:border-[var(--primary)]/50 outline-none"
+                value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})}
+              />
+              <textarea 
+                className="w-full text-sm mt-2 font-bold px-3 py-2 bg-black/5 rounded-lg border-2 border-transparent focus:border-[var(--primary)]/50 outline-none"
+                value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})}
+                rows={3}
+              />
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-[10px] font-black uppercase opacity-50 block mb-1">Time Slot</label>
+                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.time_slot} onChange={e => setEditForm({...editForm, time_slot: e.target.value})} />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[10px] font-black uppercase opacity-50 block mb-1">Cost (Rs)</label>
+                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.estimated_cost} onChange={e => setEditForm({...editForm, estimated_cost: e.target.value})} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-4 pt-2 border-t border-black/5">
+                <button onClick={handleSave} className="flex-1 bg-[var(--primary)] text-white text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><Save size={14}/> SAVE</button>
+                <button onClick={() => { setIsEditing(false); setEditForm(item); }} className="flex-1 bg-black/10 text-black/60 hover:bg-black/20 text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><X size={14}/> CANCEL</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Time slot + badges */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {item.time_slot && (
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[var(--primary)]">
+                    {item.time_slot}
+                  </span>
+                )}
+                {item.activity_type && (
+                  <span className={`flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${getActivityBadge(item.activity_type)}`}>
+                    {getActivityIcon(item.activity_type)}
+                    {item.activity_type.replace('_', ' ')}
+                  </span>
+                )}
+              </div>
 
-          <div className="flex items-center justify-between mt-3">
-            <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-black rounded-lg">
-              Est. Rs. {item.estimated_cost || '—'}
-            </span>
-            {item.description?.length > 100 && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1 text-xs font-bold opacity-40 hover:opacity-80 transition-opacity"
-              >
-                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {expanded ? 'Less' : 'More'}
-              </button>
-            )}
-          </div>
+              <h4 className="font-black text-base mb-1 group-hover:text-[var(--primary)] transition-colors leading-tight">
+                {item.title}
+              </h4>
+
+              <p className={`text-sm opacity-60 leading-relaxed ${expanded ? '' : 'line-clamp-2'}`}>
+                {item.description}
+              </p>
+
+              {/* Extra details for restaurants/cafes */}
+              {(item.must_try || item.cuisine_or_category) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.cuisine_or_category && (
+                    <span className="text-xs font-bold opacity-50">🍽️ {item.cuisine_or_category}</span>
+                  )}
+                  {item.must_try && (
+                    <span className="text-xs font-black text-emerald-600">⭐ Try: {item.must_try}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mt-3">
+                <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-black rounded-lg">
+                  Est. Rs. {item.estimated_cost || '—'}
+                </span>
+                {item.description?.length > 100 && (
+                  <button
+                    onClick={() => setExpanded(!expanded)}
+                    className="flex items-center gap-1 text-xs font-bold opacity-40 hover:opacity-80 transition-opacity"
+                  >
+                    {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {expanded ? 'Less' : 'More'}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </motion.div>
@@ -191,8 +227,39 @@ const ItineraryEditor = () => {
   const navigate = useNavigate();
   const { itinerary = { days: [] }, weather_available } = location.state || {};
   const [activeDay, setActiveDay] = useState(null);
+  const [days, setDays] = useState(itinerary.days || []);
+  const [isPublic, setIsPublic] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const days = itinerary.days || [];
+  const handleUpdateAct = async (dayNum, act) => {
+    try {
+      if (act.id) await api.patch(`activities/${act.id}/`, act);
+      setDays(prev => prev.map(d => d.day_number === dayNum ? { ...d, activities: d.activities.map(a => a.id === act.id ? act : a) } : d));
+    } catch(e) { console.error("Update failed", e); }
+  };
+
+  const handleDeleteAct = async (dayNum, actId) => {
+    try {
+      if (actId) await api.delete(`activities/${actId}/`);
+      setDays(prev => prev.map(d => d.day_number === dayNum ? { ...d, activities: d.activities.filter(a => a.id !== actId) } : d));
+    } catch(e) { console.error("Delete failed", e); }
+  };
+
+  /** Toggle the public sharing link. Copies URL to clipboard on enable. */
+  const handleToggleShare = async () => {
+    const tripId = location.state?.trip_id;
+    if (!tripId) return;
+    try {
+      const res = await api.post(`trips/${tripId}/toggle_share/`);
+      setIsPublic(res.data.is_public);
+      if (res.data.is_public) {
+        const shareUrl = `${window.location.origin}/share/${tripId}`;
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      }
+    } catch(e) { console.error("Share toggle failed", e); }
+  };
 
   return (
     <div className="p-6 md:p-12 max-w-5xl mx-auto" style={{ background: 'var(--bg-theme)' }}>
@@ -220,13 +287,26 @@ const ItineraryEditor = () => {
               )}
             </p>
           </div>
-          <button
-            onClick={() => navigate('/map', { state: { itinerary } })}
-            className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-white shadow-lg hover:scale-105 transition-transform"
-            style={{ background: 'var(--primary)' }}
-          >
-            <MapIcon size={16} /> View on Map
-          </button>
+          <div className="flex flex-wrap gap-3">
+            {/* Share button: enables public link and copies URL */}
+            {location.state?.trip_id && (
+              <button
+                onClick={handleToggleShare}
+                className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-all ${
+                  isPublic ? 'bg-emerald-500 text-white' : 'bg-black/5 hover:bg-black/10'
+                }`}
+              >
+                {copied ? <><CheckCheck size={16} /> Copied!</> : isPublic ? <><Link size={16} /> Shared</> : <><Share2 size={16} /> Share</>}
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/map', { state: { itinerary } })}
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm text-white shadow-lg hover:scale-105 transition-transform"
+              style={{ background: 'var(--primary)' }}
+            >
+              <MapIcon size={16} /> View on Map
+            </button>
+          </div>
         </div>
 
         {/* Budget tracker */}
@@ -332,7 +412,12 @@ const ItineraryEditor = () => {
                           </span>
                         </div>
                       ) : null}
-                      <ActivityCard item={act} />
+                      <ActivityCard 
+                        item={act} 
+                        dayNumber={d.day_number}
+                        onUpdate={handleUpdateAct}
+                        onDelete={handleDeleteAct}
+                      />
                     </motion.div>
                   ))}
                 </AnimatePresence>
