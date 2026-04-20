@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DollarSign, Plus, Trash2, AlertTriangle, PieChart, Tag, FileText } from 'lucide-react';
+import { DollarSign, Plus, Trash2, AlertTriangle, PieChart, Tag, FileText, Edit2 } from 'lucide-react';
 import api from '../../services/api';
 
 const ExpenseTracker = ({ trip }) => {
@@ -8,6 +8,7 @@ const ExpenseTracker = ({ trip }) => {
   const [loading, setLoading] = useState(true);
   const [newExpense, setNewExpense] = useState({ amount: '', category: 'MISC', description: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const categories = [
     { id: 'FOOD', label: 'Food & Dining', color: 'from-orange-400 to-rose-400', bg: 'bg-orange-50 text-orange-700 border-orange-200' },
@@ -18,10 +19,9 @@ const ExpenseTracker = ({ trip }) => {
   ];
 
   const fetchExpenses = () => {
-    api.get(`expenses/`)
+    api.get(`expenses/?trip=${trip.id}`)
        .then(res => {
-         const tripExpenses = res.data.filter(e => e.trip === trip.id);
-         setExpenses(tripExpenses);
+         setExpenses(res.data);
          setLoading(false);
        })
        .catch(err => {
@@ -34,26 +34,49 @@ const ExpenseTracker = ({ trip }) => {
     if (trip) fetchExpenses();
   }, [trip]);
 
-  const handleAddExpense = async (e) => {
+  const handleSubmitExpense = async (e) => {
     e.preventDefault();
     if (!newExpense.amount) return;
     
     setSubmitting(true);
     try {
-      await api.post('expenses/', {
-        trip: trip.id,
-        amount: parseFloat(newExpense.amount),
-        category: newExpense.category,
-        description: newExpense.description
-      });
+      if (editingId) {
+        await api.patch(`expenses/${editingId}/`, {
+          amount: parseFloat(newExpense.amount),
+          category: newExpense.category,
+          description: newExpense.description
+        });
+        setEditingId(null);
+      } else {
+        await api.post('expenses/', {
+          trip: trip.id,
+          amount: parseFloat(newExpense.amount),
+          category: newExpense.category,
+          description: newExpense.description
+        });
+      }
       setNewExpense({ amount: '', category: 'MISC', description: '' });
       fetchExpenses();
     } catch (err) {
       console.error(err);
-      alert('Failed to add expense. Ensure amount is valid.');
+      alert('Failed to save expense. Ensure amount is valid.');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEdit = (expense) => {
+    setNewExpense({
+      amount: expense.amount,
+      category: expense.category,
+      description: expense.description || ''
+    });
+    setEditingId(expense.id);
+  };
+  
+  const cancelEdit = () => {
+    setEditingId(null);
+    setNewExpense({ amount: '', category: 'MISC', description: '' });
   };
 
   const handleDelete = async (id) => {
@@ -145,10 +168,10 @@ const ExpenseTracker = ({ trip }) => {
         <div className="flex-grow shrink min-w-[300px] basis-[350px] relative z-10">
           <div className="bg-black/[0.02] rounded-[1.5rem] p-6 border border-black/5 shadow-sm">
             <h4 className="font-black text-lg mb-5 flex items-center gap-2 tracking-tight opacity-80">
-              <Plus size={18} className="text-[var(--primary)]" /> Log Expense
+              <Plus size={18} className="text-[var(--primary)]" /> {editingId ? 'Edit Expense' : 'Log Expense'}
             </h4>
             
-            <form onSubmit={handleAddExpense} className="space-y-4">
+            <form onSubmit={handleSubmitExpense} className="space-y-4">
               
               <div className="group relative">
                 <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-[var(--primary)]/50 group-focus-within:text-[var(--primary)] transition-colors">
@@ -189,15 +212,27 @@ const ExpenseTracker = ({ trip }) => {
                 />
               </div>
 
-              <motion.button 
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                type="submit"
-                disabled={submitting}
-                className="w-full mt-2 py-3.5 rounded-xl font-black text-white shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed text-xs"
-                style={{ background: 'var(--primary)', boxShadow: '0 4px 15px rgba(var(--primary-rgb), 0.2)' }}
-              >
-                {submitting ? 'Authenticating...' : <><Plus strokeWidth={4} size={16} /> ADD EXPENSE</>}
-              </motion.button>
+              <div className="flex gap-2">
+                <motion.button 
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 mt-2 py-3.5 rounded-xl font-black text-white shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed text-xs"
+                  style={{ background: 'var(--primary)', boxShadow: '0 4px 15px rgba(var(--primary-rgb), 0.2)' }}
+                >
+                  {submitting ? 'Saving...' : <><Plus strokeWidth={4} size={16} /> {editingId ? 'UPDATE' : 'ADD EXPENSE'}</>}
+                </motion.button>
+                {editingId && (
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={cancelEdit}
+                    className="mt-2 px-4 py-3.5 rounded-xl font-black text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all text-xs"
+                  >
+                    CANCEL
+                  </motion.button>
+                )}
+              </div>
             </form>
           </div>
         </div>
@@ -249,6 +284,13 @@ const ExpenseTracker = ({ trip }) => {
                             <span className="text-[10px] mr-0.5 opacity-60">Rs.</span>
                             <span className="text-[var(--primary)]">{parseFloat(expense.amount).toLocaleString()}</span>
                           </span>
+                          <button 
+                            onClick={() => handleEdit(expense)} 
+                            className="p-1.5 md:opacity-0 group-hover:opacity-100 text-blue-400 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-all"
+                            title="Edit transaction"
+                          >
+                            <Edit2 size={14} strokeWidth={3} />
+                          </button>
                           <button 
                             onClick={() => handleDelete(expense.id)} 
                             className="p-1.5 md:opacity-0 group-hover:opacity-100 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all"

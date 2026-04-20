@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Lock, Compass, Sparkles, Layout, ArrowRight, Loader2 } from 'lucide-react';
+import { User, Mail, Lock, Compass, Sparkles, Layout, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import BackgroundVideo from '../components/BackgroundVideo';
 
@@ -15,14 +15,15 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [success, setSuccess] = useState(false);
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
       await register(formData.username, formData.email, formData.password);
-      alert("Registration Successful! Please log in.");
-      navigate('/login');
+      setSuccess(true);
     } catch (err) {
       setError(Object.values(err)[0]); // Show the first error message from Django
     } finally {
@@ -32,6 +33,21 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
+      <AnimatePresence>
+        {success && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-xl bg-black/60">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[var(--card-theme)] w-full max-w-sm rounded-[2rem] p-8 shadow-2xl border border-black/5 text-center">
+              <CheckCircle2 size={64} className="text-emerald-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-black mb-2" style={{ color: 'var(--text-theme)' }}>Registration Successful!</h2>
+              <p className="opacity-60 font-medium mb-8 text-sm" style={{ color: 'var(--text-theme)' }}>Your exploration passport has been successfully created. You can now log in.</p>
+              <button onClick={() => navigate('/login')} className="w-full py-4 rounded-xl font-black text-white bg-[var(--primary)] shadow-lg hover:scale-105 transition-all">
+                Proceed to Login
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <BackgroundVideo />
 
       {/* Switcher */}
@@ -47,8 +63,8 @@ const Register = () => {
       <motion.div layout className="max-w-[480px] w-full p-12 rounded-[3.5rem] shadow-2xl border border-white/50 relative z-10" style={{ backgroundColor: currentTheme.card }}>
         
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-[2rem] mb-6 bg-black/5" style={{ color: currentTheme.primary }}>
-            <Compass size={40} />
+          <div className="flex justify-center mb-6">
+            <img src="/logo.png" alt="PlannedTraveler Logo" className="w-24 h-auto drop-shadow-lg" />
           </div>
           <h1 className="text-4xl font-black tracking-tighter" style={{ color: currentTheme.text }}>Join PlannedTraveler</h1>
           <p className="opacity-50 font-medium">Create your exploration passport</p>

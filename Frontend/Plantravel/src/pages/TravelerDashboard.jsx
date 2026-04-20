@@ -89,28 +89,53 @@ const TravelerDashboard = () => {
             </motion.div>
           </div>
 
-          {/* Recent Trips */}
+          {/* Your Past Trips */}
           {trips.length > 0 && (
             <div className="p-7 rounded-[2.5rem] border shadow-lg" style={{ background: 'var(--card-theme)', borderColor: 'rgba(0,0,0,0.07)' }}>
-              <h3 className="font-black text-lg mb-5" style={{ color: 'var(--text-theme)' }}>Recent Trips</h3>
-              <div className="space-y-3">
-                {trips.slice(0, 3).map((t, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
-                    className="flex items-center gap-4 p-4 rounded-2xl transition-colors hover:bg-black/3"
-                    style={{ borderBottom: i < Math.min(trips.length, 3) - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0"
+              <h3 className="font-black text-lg mb-5" style={{ color: 'var(--text-theme)' }}>Your Trips</h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto pr-2 no-scrollbar">
+                {trips.map((t, i) => (
+                  <motion.div 
+                    key={i} 
+                    onClick={() => {
+                      // Reconstruct the days array from the flat activities structure
+                      const daysMap = {};
+                      (t.activities || []).forEach(act => {
+                        if (!daysMap[act.day_number]) daysMap[act.day_number] = { day_number: act.day_number, activities: [] };
+                        daysMap[act.day_number].activities.push(act);
+                      });
+                      
+                      const itinerary = {
+                        destination: t.destination,
+                        budget: t.budget,
+                        travel_style: t.group_size,
+                        days: Object.values(daysMap).sort((a,b) => a.day_number - b.day_number)
+                      };
+
+                      navigate('/itinerary-editor', { state: { itinerary, trip_id: t.id } });
+                    }}
+                    initial={{ opacity: 0, x: -10 }} 
+                    animate={{ opacity: 1, x: 0 }} 
+                    transition={{ delay: Math.min(i * 0.07, 0.3) }}
+                    className="flex items-center gap-4 p-4 rounded-2xl transition-all hover:bg-black/5 hover:scale-[1.02] cursor-pointer group"
+                    style={{ borderBottom: i < trips.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+                    
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg flex-shrink-0 group-hover:shadow-md transition-shadow"
                       style={{ background: 'var(--primary)' }}>
                       {t.destination?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-black text-sm truncate">{t.destination}</p>
-                      <p className="text-xs opacity-40 font-medium">{t.start_date} → {t.end_date}</p>
+                      <p className="font-black text-sm truncate group-hover:text-[var(--primary)] transition-colors">{t.destination}</p>
+                      <p className="text-xs opacity-50 font-bold">{t.start_date} → {t.end_date}</p>
                     </div>
                     {t.budget && (
                       <span className="text-xs font-black text-emerald-600 flex-shrink-0">
                         Rs. {Number(t.budget).toLocaleString()}
                       </span>
                     )}
+                    <span className="opacity-0 group-hover:opacity-50 transition-opacity ml-2">
+                       <ArrowRight size={16} />
+                    </span>
                   </motion.div>
                 ))}
               </div>
