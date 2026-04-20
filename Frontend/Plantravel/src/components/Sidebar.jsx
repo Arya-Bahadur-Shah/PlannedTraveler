@@ -28,6 +28,11 @@ const Sidebar = () => {
     <aside className="fixed left-0 top-0 h-screen w-20 md:w-64 flex flex-col py-8 z-50 transition-all duration-500 border-r"
       style={{ backgroundColor: `${currentTheme.bg}EE`, backdropFilter: 'blur(20px)', borderColor: 'var(--primary)' }}>
       
+      {/* Logo Section */}
+      {/* <div className="flex justify-center mb-6 px-4">
+        <img src="/logo.png" alt="PlannedTraveler Logo" className="w-16 h-auto md:w-24 drop-shadow-md transition-transform hover:scale-105" />
+      </div> */ }
+
       {/* 1. Profile / Avatar Section (New Update) */}
       <Link to="/profile" className="flex flex-col items-center mb-10 px-4 group">
         <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-[var(--primary)] text-white flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">

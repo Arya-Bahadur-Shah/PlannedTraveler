@@ -11,6 +11,13 @@ export const AuthProvider = ({ children }) => {
     const saved = localStorage.getItem('user');
     if (saved) setUser(JSON.parse(saved));
     setLoading(false);
+
+    // Listen for auth decline (e.g. from axios 401 interceptor)
+    const handleAuthDeclined = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth_declined', handleAuthDeclined);
+    return () => window.removeEventListener('auth_declined', handleAuthDeclined);
   }, []);
 
   const login = async (username, password) => {
@@ -23,6 +30,21 @@ export const AuthProvider = ({ children }) => {
   localStorage.setItem('user', JSON.stringify(userData));
   setUser(userData);
 };
+
+  const sendOtp = async (email) => {
+    return await api.post('otp/send/', { email });
+  };
+
+  const verifyOtp = async (email, otp) => {
+    const res = await api.post('otp/verify/', { email, otp });
+    const userData = {
+      username: res.data.username,
+      role: res.data.role
+    };
+    localStorage.setItem('access_token', res.data.access);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
 
   const logout = () => {
     localStorage.clear();
@@ -39,7 +61,7 @@ const register = async (username, email, password) => {
 };
 
 return (
-  <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+  <AuthContext.Provider value={{ user, login, sendOtp, verifyOtp, register, logout, loading }}>
     {children}
   </AuthContext.Provider>
 );

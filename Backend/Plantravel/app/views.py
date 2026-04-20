@@ -1,7 +1,4 @@
 import json
-import requests
-import traceback
-from datetime import datetime, timedelta, date
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -13,16 +10,17 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User, Post, Comment, Like, Report, Trip, ItineraryActivity
+import requests
+import re
+import os
+import traceback
+from datetime import datetime, timedelta, date
+from django.core.mail import send_mail
+from .models import User, Post, Comment, Like, Report, Trip, ItineraryActivity, Expense, Notification, EmailOTP
 from .serializers import (
-    UserSerializer, RegisterSerializer, PostSerializer,
-    CommentSerializer, ReportSerializer, TripSerializer
+    UserSerializer, RegisterSerializer, PostSerializer, 
+    CommentSerializer, ReportSerializer, TripSerializer, NotificationSerializer
 )
-
-
-# ─────────────────────────────────────────────────────────────
-# AUTH VIEWS
-# ─────────────────────────────────────────────────────────────
 
 class MyTokenSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -46,10 +44,7 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-
-# ─────────────────────────────────────────────────────────────
-# PASSWORD RESET
-# ─────────────────────────────────────────────────────────────
+# --- 2. PASSWORD RESET LOGIC ---
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -60,31 +55,120 @@ def request_password_reset(request):
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         reset_link = f"http://localhost:5173/reset-password/{uid}/{token}"
-        print(f"DEBUG: Password Reset Link: {reset_link}")
-        return Response({"message": "Reset link generated in console."}, status=200)
+        
+        try:
+            send_mail(
+                'Password Reset Request - PlannedTraveler',
+                f'Hello,\n\nPlease click the link below to reset your password:\n{reset_link}\n\nIf you did not request this, please ignore this email.',
+                os.environ.get('EMAIL_HOST_USER', 'noreply@plannedtraveler.com'),
+                [email],
+                fail_silently=False,
+            )
+            print(f"DEBUG: Password Reset Link: {reset_link}")
+        except Exception as e:
+            print(f"Failed to send email: {e}")
+            print(f"DEBUG: Password Reset Link: {reset_link}")
+
+        return Response({"message": "Reset link sent to your email."}, status=200)
     return Response({"message": "If account exists, link sent."}, status=200)
+
+class SendOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+        
+        import random
+        from django.utils import timezone
+        otp = str(random.randint(100000, 999999))
+        
+        EmailOTP.objects.update_or_create(
+            email=email,
+            defaults={'otp': otp}
+        )
+        
+        try:
+            send_mail(
+                'Your Login Code - PlannedTraveler',
+                f'Your one-time login code is: {otp}\nThis code will expire in 10 minutes.',
+                os.environ.get('EMAIL_HOST_USER', 'noreply@plannedtraveler.com'),
+                [email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            print(f"Failed to send OTP email: {e}")
+            return Response({"error": "Failed to send OTP email."}, status=500)
+
+        return Response({"message": "OTP sent successfully."}, status=200)
+
+class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        
+        try:
+            record = EmailOTP.objects.get(email=email)
+            if record.otp != otp:
+                return Response({"error": "Invalid OTP."}, status=400)
+            
+            from django.utils import timezone
+            from datetime import timedelta
+            if timezone.now() > record.created_at + timedelta(minutes=10):
+                return Response({"error": "OTP has expired."}, status=400)
+            
+            # Use filter().first() to handle duplicate emails gracefully
+            user = User.objects.filter(email=email).first()
+            if not user:
+                base_username = email.split('@')[0]
+                username = base_username
+                counter = 1
+                
+                # Ensure the username is strictly unique in the DB
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user = User.objects.create(
+                    email=email,
+                    username=username,
+                    role='USER'
+                )
+                user.set_unusable_password()
+                user.save()
+            
+            record.delete()
+            
+            refresh = MyTokenSerializer.get_token(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'username': user.username,
+                'role': user.role
+            }, status=200)
+                
+        except EmailOTP.DoesNotExist:
+            return Response({"error": "No OTP requested for this email."}, status=400)
+        except Exception as e:
+            print(f"OTP Verify Error: {e}")
+            return Response({"error": "Verification failed. Please try again."}, status=500)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def reset_password_confirm(request, uidb64, token):
-    password = request.data.get('password')
-    if not password:
-        return Response({"error": "Password is required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         uid = force_str(urlsafe_base64_decode(uidb64))
         user = User.objects.get(pk=uid)
-    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        user = None
+    except: user = None
+
     if user and default_token_generator.check_token(user, token):
-        user.set_password(password)
+        user.set_password(request.data.get('password'))
         user.save()
-        return Response({"message": "Password updated!"}, status=status.HTTP_200_OK)
-    return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
-
-
-# ─────────────────────────────────────────────────────────────
-# COMMUNITY VIEWSETS
-# ─────────────────────────────────────────────────────────────
+        return Response({"message": "Password updated!"}, status=200)
+    return Response({"error": "Invalid token"}, status=400)
 
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.filter(is_blocked=False).order_by('-created_at')
@@ -102,7 +186,7 @@ class PostViewSet(viewsets.ModelViewSet):
     def like(self, request, pk=None):
         post = self.get_object()
         like, created = Like.objects.get_or_create(user=request.user, post=post)
-        if not created:
+        if not created: 
             like.delete()
         return Response({'likes': post.likes.count()})
 
@@ -153,6 +237,7 @@ class UserViewSet(viewsets.ModelViewSet):
         target_user = self.get_object()
         if request.user == target_user:
             return Response({"error": "Cannot follow yourself"}, status=400)
+        
         if request.user.following.filter(id=target_user.id).exists():
             request.user.following.remove(target_user)
             return Response({"status": "unfollowed", "followers": target_user.followers.count()})
@@ -180,19 +265,6 @@ class ProfileViewSet(viewsets.ViewSet):
             "trips": TripSerializer(trips, many=True).data
         })
 
-    @action(detail=False, methods=['put', 'patch'])
-    def update_profile(self, request):
-        user = request.user
-        data = request.data
-        if 'bio' in data:
-            user.bio = data['bio']
-        if 'username' in data:
-            user.username = data['username']
-        if 'profile_picture' in request.FILES:
-            user.profile_picture = request.FILES['profile_picture']
-        user.save()
-        return Response({"message": "Profile updated successfully"})
-
 class AdminStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -205,27 +277,6 @@ class AdminStatsView(APIView):
             "total_trips": Trip.objects.count(),
             "pending_reports": Report.objects.filter(is_resolved=False).count()
         })
-
-
-# ─────────────────────────────────────────────────────────────
-# WEATHER HELPER  (Open-Meteo – no API key required)
-# ─────────────────────────────────────────────────────────────
-
-def _geocode_destination(destination: str):
-    """Resolve a place name to (lat, lon) using Open-Meteo geocoding."""
-    try:
-        resp = requests.get(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={"name": destination, "count": 1, "language": "en", "format": "json"},
-            timeout=8
-        )
-        results = resp.json().get("results", [])
-        if results:
-            return results[0]["latitude"], results[0]["longitude"]
-    except Exception as e:
-        print(f"Geocoding failed: {e}")
-    # Default to Kathmandu if geocoding fails
-    return 27.7172, 85.3240
 
 
 def _fetch_weather(lat: float, lon: float, start_date: str, end_date: str) -> dict:
@@ -353,8 +404,24 @@ def _get_vibe_instructions(travel_vibes: list) -> str:
 # ITINERARY GENERATION VIEW
 # ─────────────────────────────────────────────────────────────
 
+
 class GenerateItineraryView(APIView):
     permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _geocode_destination(destination):
+        """Fetch real latitude and longitude coordinates for a destination."""
+        import requests
+        try:
+            url = f"https://nominatim.openstreetmap.org/search?q={destination}&format=json&limit=1"
+            headers = {"User-Agent": "PlannedTravelerApp/1.0"}
+            resp = requests.get(url, headers=headers, timeout=5)
+            if resp.status_code == 200 and len(resp.json()) > 0:
+                data = resp.json()[0]
+                return float(data['lat']), float(data['lon'])
+        except Exception as e:
+            print(f"Geocoding error: {e}")
+        return 27.7172, 85.3240  # Default to Kathmandu
 
     def post(self, request):
         data = request.data
@@ -363,7 +430,7 @@ class GenerateItineraryView(APIView):
         end_date = data.get('end_date')
         budget = data.get('budget')
         group_size = data.get('group_size', 'Solo Explorer')
-        travel_vibes = data.get('travel_vibes', [])  # e.g. ["nature", "aesthetic_cafe"]
+        travel_vibes = data.get('travel_vibes', [])
 
         if not all([destination, start_date, end_date, budget]):
             return Response({"error": "Missing required fields"}, status=400)
@@ -384,7 +451,7 @@ class GenerateItineraryView(APIView):
             )
 
             # ── Fetch weather ───────────────────────────────────
-            lat, lon = _geocode_destination(destination)
+            lat, lon = GenerateItineraryView._geocode_destination(destination)
             # Open-Meteo only forecasts 16 days ahead; use mock if beyond range
             today = date.today()
             if (s_date - today).days <= 15:
@@ -408,53 +475,69 @@ class GenerateItineraryView(APIView):
             vibe_instructions = _get_vibe_instructions(travel_vibes)
             vibe_label = ", ".join(travel_vibes) if travel_vibes else "Balanced"
 
-            # ── Construct advanced prompt ───────────────────────
-            prompt = f"""
-You are an elite travel concierge and local expert for Nepal with 20 years of experience.
-Create a comprehensive, highly-detailed, day-by-day itinerary for a trip to {destination}, Nepal.
+            # ── Analytics: Past Trips context ────────
+            past_trips = Trip.objects.filter(user=request.user, is_completed=True)
+            past_destinations = [t.destination for t in past_trips if t.destination != destination]
+            past_trips_ctx = f"The user has previously visited: {', '.join(set(past_destinations))}. Ensure this itinerary gives a slightly different experience." if past_destinations else "This is the user's first trip documented here."
 
-TRIP DETAILS:
-- Destination: {destination}
-- Travel Dates: {clean_start} to {clean_end} ({num_days} days)
-- Total Budget: NPR {budget}
-- Group Type: {group_size}
-- Travel Vibe/Style: {vibe_label}
+            # ── Budget tier logic ──────────────────────────
+            budget_num = float(budget) if budget else 50000
+            daily_budget = round(budget_num / max(num_days, 1))
 
-WEATHER FORECAST (CRITICAL — plan activities around this):
-{weather_section}
+            if budget_num >= 80000:
+                budget_tier = "LUXURY"
+                breakfast_range = "NPR 1500-3000 (hotel buffet, rooftop cafe, fine dining brunch)"
+                lunch_range = "NPR 2000-4000 (upscale restaurant, hotel dining, multi-course set lunch)"
+                dinner_range = "NPR 3000-6000 (fine dining, hotel restaurant, premium cuisine)"
+                activity_range = "NPR 2000-8000 (private guided tours, spa, premium experiences)"
+                hotel_note = "Suggest 5-star hotels, luxury resorts, or boutique heritage properties."
+            elif budget_num >= 40000:
+                budget_tier = "MID-RANGE"
+                breakfast_range = "NPR 600-1200 (popular cafe, bakery, or hotel breakfast)"
+                lunch_range = "NPR 800-1800 (well-known restaurant with good ambiance)"
+                dinner_range = "NPR 1200-2500 (quality restaurant, live music, or cultural dining)"
+                activity_range = "NPR 500-3000 (guided tours, adventure activities, museum entry)"
+                hotel_note = "Suggest 3-4 star hotels or well-rated guesthouses."
+            else:
+                budget_tier = "BUDGET"
+                breakfast_range = "NPR 200-500 (local teahouse, dal bhat, street food)"
+                lunch_range = "NPR 300-700 (local eatery, momo house, cheap thali)"
+                dinner_range = "NPR 400-900 (popular local restaurant or street stall)"
+                activity_range = "NPR 50-500 (free attractions, cheap entry fees, local markets)"
+                hotel_note = "Suggest budget guesthouses, hostels, or cheap lodges."
 
-TRAVELER VIBE PREFERENCES (tailor all recommendations to these):
-   {vibe_instructions}
+            # ── Construct advanced prompt (Using Triple Quotes) ───────────────────────
+            prompt = f"""Act as an expert local travel guide and financial planner. Create a highly specific {num_days}-day itinerary for {destination}.
 
-MANDATORY REQUIREMENTS FOR EVERY DAY:
-1. MORNING (7:00 AM – 12:00 PM):
-   - Start with a SPECIFIC breakfast spot or café (name it, describe the specialty dish, price in NPR)
-   - Include one PRIMARY tourist attraction or activity with exact entry fees in NPR
-   - If weather is marked BAD, replace outdoor activities with compelling INDOOR alternatives
-     (e.g., museums, art galleries, cooking classes, spa treatments, local workshops, tea houses)
+--- TRIP PARAMETERS ---
+Total Days: {num_days}
+Dates: {clean_start} to {clean_end}
+Group Type: {group_size}
+Style: {vibe_label}
+Total Budget: Rs. {int(budget_num)} NPR (approx Rs. {daily_budget} NPR per day).
+Budget Tier: {budget_tier}
+{'Weather: ' + weather_section if weather_section else ''}
+{'Vibes: ' + vibe_instructions if vibe_instructions else ''}
 
-2. AFTERNOON (12:00 PM – 5:00 PM):
-   - LUNCH recommendation: name a specific restaurant/eatery, its cuisine, a must-try dish, price range
-   - Primary afternoon activity: a specific tourist viewpoint, heritage site, or cultural experience
-   - Include transport mode and approximate travel time between locations
+--- BUDGET ENFORCEMENT (CRITICAL) ---
+This is a {budget_tier} trip with a total budget of Rs. {int(budget_num)} NPR.
+Breakfast per activity: {breakfast_range}
+Lunch per activity: {lunch_range}
+Dinner per activity: {dinner_range}
+Activity/sightseeing: {activity_range}
+Accommodation: {hotel_note}
+The SUM of ALL estimated_cost values across ALL {num_days} days MUST be close to Rs. {int(budget_num)} NPR.
+Do NOT use low values like 200-500 for a LUXURY or MID-RANGE budget.
 
-3. EVENING (5:00 PM – 10:00 PM):
-   - Sunset spot (if weather permits) or alternative atmospheric indoor venue
-   - DINNER recommendation: name a specific restaurant, cuisine type, ambiance, price per person in NPR
-   - Optional after-dinner activity: night market, rooftop bar, cultural show, or evening stroll
+--- STRICT INSTRUCTIONS ---
+1. Generate exactly {num_days} days. Do not stop early.
+2. Use real-world landmarks, specific restaurant names, and real streets in {destination}.
+3. Provide highly accurate decimal latitude and longitude for EVERY activity.
+4. Each estimated_cost must be a plain number string (e.g. "2500") with NO Rs. prefix.
+5. Keep description to exactly 1 concise sentence.
+6. Output ONLY valid JSON. No markdown, no extra text.
 
-4. SPECIFIC LOCATIONS ONLY — never use generic phrases like:
-   - ❌ "Visit a local temple" → ✅ "Visit Bindhyabasini Temple, Pokhara's oldest hilltop shrine"
-   - ❌ "Explore local markets" → ✅ "Browse Bagar Market for fresh produce and handmade goods"
-   - ❌ "Have lunch at a restaurant" → ✅ "Lunch at Moondance Restaurant; try their yak cheese pizza (NPR 650)"
-
-5. COST BREAKDOWN — every activity must have an estimated_cost in NPR as a plain number string.
-
-6. COORDINATES — provide realistic latitude/longitude for every specific location in Nepal.
-
-7. ACTIVITY TYPE — tag each activity as one of: "tourist_spot", "restaurant", "cafe", "indoor", "adventure", "cultural", "nature", "shopping"
-
-OUTPUT — return ONLY valid JSON, no markdown fences, no extra text:
+--- JSON SCHEMA ---
 {{
   "destination": "{destination}",
   "total_days": {num_days},
@@ -463,63 +546,39 @@ OUTPUT — return ONLY valid JSON, no markdown fences, no extra text:
     {{
       "day_number": 1,
       "date": "{clean_start}",
-      "weather": {{
-        "condition": "Clear Sky",
-        "temp_max": 28,
-        "temp_min": 18,
-        "rain_mm": 0,
-        "is_bad_weather": false
-      }},
       "activities": [
         {{
           "time_of_day": "Morning",
-          "time_slot": "7:30 AM",
-          "activity_type": "cafe",
-          "title": "Breakfast at Olive Cafe",
-          "description": "Start your day at this beloved Lakeside institution. Order the eggs benedict with Nepali spiced potatoes and a fresh pot of masala tea. A favorite among travelers for its garden seating and mountain views.",
-          "cuisine_or_category": "Nepali-Continental Fusion",
-          "must_try": "Eggs Benedict with masala potatoes",
-          "estimated_cost": "450",
-          "latitude": 28.2096,
-          "longitude": 83.9586,
-          "transport_tip": "5-minute walk from most Lakeside hotels",
-          "indoor": true,
-          "is_restaurant": true
-        }},
-        {{
-          "time_of_day": "Morning",
-          "time_slot": "9:30 AM",
-          "activity_type": "tourist_spot",
-          "title": "Phewa Lake Boating & Tal Barahi Temple",
-          "description": "Rent a wooden rowboat (NPR 400/hour) and paddle to the sacred island temple of Tal Barahi in the middle of Phewa Lake. The pagoda-style Hindu shrine and reflections of the Annapurna range create an unforgettable sight.",
-          "estimated_cost": "600",
-          "entry_fee": "50 NPR (temple donation)",
-          "latitude": 28.2096,
-          "longitude": 83.9556,
-          "transport_tip": "Boats available at the Lakeside ghats",
-          "indoor": false,
-          "is_restaurant": false
+          "title": "Breakfast at Dwarika's Hotel",
+          "description": "Enjoy a lavish breakfast buffet at this heritage 5-star property.",
+          "estimated_cost": "2500",
+          "latitude": 27.7089,
+          "longitude": 85.3298,
+          "activity_type": "cafe"
         }}
       ]
     }}
   ]
-}}
-"""
+}}"""
+
             # ── Call Ollama ─────────────────────────────────────
             ai_data = None
             try:
                 ollama_url = "http://localhost:11434/api/chat"
                 payload = {
-                    "model": "llama3",
+                    "model": "llama3.2:latest",
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "format": "json",
                     "options": {"temperature": 0.7, "num_predict": 8192}
                 }
-                res = requests.post(ollama_url, json=payload, timeout=90.0)
+                res = requests.post(ollama_url, json=payload, timeout=150.0)
                 res.raise_for_status()
                 content = res.json().get('message', {}).get('content', '{}')
-                ai_data = json.loads(content)
+                raw_text = content
+                if raw_text.strip().startswith("```"):
+                    raw_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip(), flags=re.MULTILINE)
+                ai_data = json.loads(raw_text)
                 print("✅ Ollama responded successfully.")
             except Exception as e:
                 print(f"⚠️  Ollama unavailable, generating smart fallback: {e}")
@@ -532,20 +591,25 @@ OUTPUT — return ONLY valid JSON, no markdown fences, no extra text:
                 )
 
             # ── Save activities to database ─────────────────────
-            activities_to_create = []
             for day in ai_data.get('days', []):
                 for act in day.get('activities', []):
-                    activities_to_create.append(ItineraryActivity(
+                    # Robust Cost Cleaning: Extract only the numbers so the DB and frontend don't crash
+                    raw_cost = str(act.get('estimated_cost', '')).replace(',', '')
+                    cost_match = re.search(r'[\d\.]+', raw_cost)
+                    clean_cost = cost_match.group(0) if cost_match else "0"
+
+                    db_act = ItineraryActivity.objects.create(
                         trip=trip,
-                        day_number=day['day_number'],
+                        day_number=day.get('day_number', 1),
                         time_of_day=act.get('time_of_day', 'Morning'),
                         title=act.get('title', ''),
                         description=act.get('description', ''),
-                        estimated_cost=str(act.get('estimated_cost', '')),
+                        estimated_cost=clean_cost,
                         latitude=act.get('latitude'),
                         longitude=act.get('longitude')
-                    ))
-            ItineraryActivity.objects.bulk_create(activities_to_create)
+                    )
+                    act['id'] = db_act.id  
+                    act['estimated_cost'] = clean_cost  # Ensure returned JSON also has the clean cost
 
             return Response({
                 "message": "Itinerary generated successfully",
@@ -788,69 +852,82 @@ OUTPUT — return ONLY valid JSON, no markdown fences, no extra text:
 # VIBE DESTINATION SUGGESTION VIEW
 # ─────────────────────────────────────────────────────────────
 
-class GenerateVibeDestinationView(APIView):
+
+class AnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    VIBE_DESTINATIONS = {
-        "trendy": [
-            {"name": "Thamel, Kathmandu", "tagline": "Nepal's buzzing epicenter of hip cafes, rooftop bars, and street art", "emoji": "🔥", "highlights": "Rooftop lounges, craft beer, boutique stays, live music"},
-            {"name": "Lakeside, Pokhara", "tagline": "Vibrant waterfront promenade with trendy cafes and adventure tourism", "emoji": "✨", "highlights": "Instagram lakefront, yoga retreats, paragliding"},
-        ],
-        "aesthetic_cafe": [
-            {"name": "Patan, Lalitpur", "tagline": "Artsy heritage city with the finest specialty coffee scene in Nepal", "emoji": "☕", "highlights": "Specialty coffee, Newari architecture, art galleries"},
-            {"name": "Lakeside, Pokhara", "tagline": "Lakeside cafe culture with mountain backdrop", "emoji": "☕", "highlights": "Lake-view cafes, bohemian vibes, artisan bakeries"},
-        ],
-        "nature": [
-            {"name": "Chitwan National Park", "tagline": "UNESCO World Heritage jungle — rhinos, tigers, and elephant safaris", "emoji": "🌿", "highlights": "Jungle safaris, canoe rides, elephant encounters, birdwatching"},
-            {"name": "Annapurna Base Camp Trek", "tagline": "Nepal's most beloved trek through rhododendron forests to the Himalayan amphitheatre", "emoji": "🏔️", "highlights": "Mountain views, terraced villages, hot springs at Jhinu Danda"},
-            {"name": "Rara Lake", "tagline": "Nepal's largest and most pristine lake — a remote paradise few travelers reach", "emoji": "💎", "highlights": "Crystal lake, alpine forests, complete serenity"},
-        ],
-        "adventure": [
-            {"name": "Pokhara", "tagline": "Adventure capital of Nepal — paragliding, rafting, bungee, and more", "emoji": "🪂", "highlights": "Paragliding from Sarangkot, white-water rafting, zip-lining"},
-            {"name": "Bhotekoshi River (Sindhupalchok)", "tagline": "Home to Nepal's most extreme white-water rafting and bungee jumping", "emoji": "⚡", "highlights": "Grade IV+ rafting, bungee over gorge, canyoning"},
-        ],
-        "cultural": [
-            {"name": "Bhaktapur", "tagline": "Nepal's best-preserved medieval city — a living museum of Newari art", "emoji": "🏛️", "highlights": "Pottery square, 55-Window Palace, traditional ghee tea"},
-            {"name": "Lumbini", "tagline": "Birthplace of Lord Buddha — a sacred pilgrimage site of global significance", "emoji": "🕉️", "highlights": "Maya Devi Temple, Sacred Garden, international monasteries"},
-            {"name": "Mustang (Lo Manthang)", "tagline": "Forbidden Kingdom — ancient Tibetan culture preserved in the Himalayan rain shadow", "emoji": "🏯", "highlights": "Walled capital city, cave monasteries, sky caves"},
-        ],
-        "foodie": [
-            {"name": "Kathmandu", "tagline": "Nepal's culinary capital with every type of cuisine from dal bhat to fine dining", "emoji": "🍜", "highlights": "Newari feasts, momo culture, Thamel food tours, rooftop dining"},
-            {"name": "Pokhara", "tagline": "Lakeside dining with spectacular mountain views and diverse global cuisine", "emoji": "🥘", "highlights": "Fresh trout, yak cheese, lakeside restaurants, cooking classes"},
-        ],
-        "vibey": [
-            {"name": "Pokhara", "tagline": "Nepal's most soulful city — bohemian energy, lakeside sunsets, and mountain magic", "emoji": "✨", "highlights": "Sunset at Sarangkot, reggae bars, yoga studios, full-moon lakeside events"},
-            {"name": "Thamel, Kathmandu", "tagline": "The beating heart of Nepal's travel scene — chaotic, colorful, and electric", "emoji": "🌙", "highlights": "Night markets, rooftop lounges, live jazz, spiritual energy"},
-        ],
-        "beach": [
-            {"name": "Phewa Lake, Pokhara", "tagline": "Nepal's most iconic lake with stunning Himalayan reflections", "emoji": "🚣", "highlights": "Boating, lakeside cafes, fishing, sunset views, Barahi Temple island"},
-            {"name": "Fewa Tal Lakeside", "tagline": "Serene lakeside retreat perfect for relaxation, sunsets, and slow travel", "emoji": "🌅", "highlights": "Kayaking, paddleboarding, lakeside yoga, sunset boat rides"},
-        ],
-    }
+    def get(self, request):
+        from django.db.models import Sum
+        user = request.user
+        trips = Trip.objects.filter(user=user)
+        total_trips = trips.count()
+        completed_trips = trips.filter(is_completed=True).count()
+        
+        expenses = Expense.objects.filter(trip__user=user)
+        total_spent = expenses.aggregate(total=Sum('amount'))['total'] or 0
 
-    def post(self, request):
-        travel_vibes = request.data.get("travel_vibes", [])
-        if not travel_vibes:
-            return Response({"error": "Please select at least one travel vibe"}, status=400)
+        cat_data = expenses.values('category').annotate(value=Sum('amount'))
+        category_data = [{"name": c['category'], "value": c['value']} for c in cat_data]
 
-        suggestions = []
-        seen = set()
-        for vibe in travel_vibes:
-            vibe_key = vibe.lower().replace(" ", "_").replace("-", "_")
-            for dest in self.VIBE_DESTINATIONS.get(vibe_key, []):
-                if dest["name"] not in seen:
-                    suggestions.append({**dest, "matched_vibe": vibe})
-                    seen.add(dest["name"])
-
-        if not suggestions:
-            # Generic popular suggestions
-            suggestions = [
-                {"name": "Pokhara", "tagline": "Nepal's adventure and relaxation capital by the Himalayas", "emoji": "🏔️", "highlights": "Lakes, mountains, adventure sports, cafes"},
-                {"name": "Kathmandu", "tagline": "Ancient temples, vibrant streets, and rich Nepali culture", "emoji": "🕌", "highlights": "Heritage sites, food scene, trekking gateway"},
-                {"name": "Chitwan", "tagline": "Untamed jungle safari in Nepal's premier national park", "emoji": "🦏", "highlights": "Wildlife, jungle walks, elephant encounters"},
-            ]
+        trend_data = [{"month": "This Month", "trips": total_trips}]
 
         return Response({
-            "vibes": travel_vibes,
-            "suggestions": suggestions[:6]  # Return max 6 suggestions
+            "total_trips": total_trips,
+            "completed_trips": completed_trips,
+            "total_spent": total_spent,
+            "category_data": category_data,
+            "trend_data": trend_data
         })
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user).order_by('-created_at')
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notif = self.get_object()
+        notif.is_read = True
+        notif.save()
+        return Response({'status': 'read'})
+
+class TripViewSet(viewsets.ModelViewSet):
+    queryset = Trip.objects.all()
+    serializer_class = TripSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+
+class ExpenseViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        from .serializers import ExpenseSerializer
+        return ExpenseSerializer
+
+    def get_queryset(self):
+        from .models import Expense
+        qs = Expense.objects.filter(trip__user=self.request.user).order_by('-date')
+        trip_id = self.request.query_params.get('trip')
+        if trip_id:
+            qs = qs.filter(trip_id=trip_id)
+        return qs
+
+    def perform_create(self, serializer):
+        trip = serializer.validated_data.get('trip')
+        if trip.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not own this trip.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        trip = serializer.validated_data.get('trip')
+        if trip and trip.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You cannot move expense to a trip you do not own.")
+        serializer.save()

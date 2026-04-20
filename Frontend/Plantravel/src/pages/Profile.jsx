@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
-import { User, MapPin, BookOpen, Users, History, Settings as SettingsIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, MapPin, BookOpen, Users, History, Settings as SettingsIcon, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import ExpenseTracker from '../components/Expense/ExpenseTracker';
 
 const Profile = () => {
@@ -11,6 +12,7 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ username: '', bio: '' });
   const [expandedTripId, setExpandedTripId] = useState(null);
+  const [tripToDelete, setTripToDelete] = useState(null);
 
   const [profilePicFile, setProfilePicFile] = useState(null);
 
@@ -24,6 +26,23 @@ const Profile = () => {
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  const triggerDeleteTrip = (tripId, e) => {
+    e.stopPropagation();
+    setTripToDelete(tripId);
+  };
+
+  const confirmDeleteTrip = async () => {
+    if (!tripToDelete) return;
+    try {
+      await api.delete(`trips/${tripToDelete}/`);
+      setTripToDelete(null);
+      fetchProfile();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete trip');
+    }
+  };
 
   const handleUpdateProfile = async () => {
     try {
@@ -157,6 +176,13 @@ const Profile = () => {
                     {trip.is_completed ? 'COMPLETED' : 'PLANNED'}
                   </span>
                 </div>
+                <button
+                  onClick={(e) => triggerDeleteTrip(trip.id, e)}
+                  title="Delete Trip"
+                  className="p-2 rounded-full hover:bg-red-500/10 text-red-500 transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
                 {expandedTripId === trip.id ? <ChevronUp className="text-[var(--primary)]" /> : <ChevronDown className="opacity-40" />}
               </div>
             </div>
@@ -172,6 +198,44 @@ const Profile = () => {
         
         {activeTab === 'blogs' && profile.posts.length === 0 && <p className="opacity-40 font-bold italic">No stories shared yet...</p>}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {tripToDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--card-theme)] border border-[var(--primary)]/10 p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-500 to-orange-500" />
+              <div className="w-16 h-16 rounded-[1.5rem] bg-red-500/10 text-red-500 flex items-center justify-center mb-6 mx-auto">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-center mb-2 tracking-tight">Delete Trip?</h3>
+              <p className="text-center opacity-60 font-bold text-sm mb-8 leading-relaxed">
+                Are you sure you want to delete this trip and all its expenses? This action cannot be undone.
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setTripToDelete(null)}
+                  className="flex-1 py-4 rounded-2xl font-black bg-black/5 hover:bg-black/10 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteTrip}
+                  className="flex-1 py-4 rounded-2xl font-black text-white shadow-lg shadow-red-500/30 transition-all hover:scale-105 active:scale-95 text-sm"
+                  style={{ background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)' }}
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

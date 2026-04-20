@@ -44,8 +44,15 @@ api.interceptors.response.use(
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       
-      // If we aren't already on the login page, force a reload to kick them out
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+      // Tell React explicitly that auth is gone
+      window.dispatchEvent(new Event('auth_declined'));
+      
+      // Define public routes that do not require forced login redirection
+      const publicRoutes = ['/', '/login', '/register', '/blogs', '/forgot-password'];
+      const isPublic = publicRoutes.includes(window.location.pathname) || window.location.pathname.startsWith('/share/');
+
+      // If they are not on a public page, force them to login
+      if (!isPublic) {
         window.location.href = '/login';
       }
     }

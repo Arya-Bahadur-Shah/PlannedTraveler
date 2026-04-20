@@ -88,7 +88,7 @@ const ActivityCard = ({ item }) => {
           </p>
           <div className="flex items-center justify-between mt-3">
             <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-black rounded-lg">
-              Est. Rs. {item.estimated_cost || '—'}
+              Est. Rs. {String(item.estimated_cost || '').replace(/[^0-9.]/g, '') || '0'}
             </span>
             {item.description?.length > 100 && (
               <button

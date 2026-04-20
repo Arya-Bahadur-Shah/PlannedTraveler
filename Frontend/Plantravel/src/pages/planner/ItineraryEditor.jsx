@@ -12,33 +12,33 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 const getTimeIcon = (time = '') => {
   const t = time.toLowerCase();
-  if (t === 'morning')   return <Sun className="text-orange-400" size={20} />;
+  if (t === 'morning') return <Sun className="text-orange-400" size={20} />;
   if (t === 'afternoon') return <Sunset className="text-pink-400" size={20} />;
   return <Moon className="text-indigo-400" size={20} />;
 };
 
 const getActivityIcon = (type = '') => {
   const t = type.toLowerCase();
-  if (t === 'restaurant')    return <Utensils size={16} className="text-emerald-500" />;
-  if (t === 'cafe')           return <Coffee    size={16} className="text-amber-500" />;
-  if (t === 'indoor')         return <Landmark  size={16} className="text-violet-500" />;
-  if (t === 'nature')         return <TreePine  size={16} className="text-green-500" />;
-  if (t === 'adventure')      return <Tent      size={16} className="text-sky-500" />;
-  if (t === 'cultural')       return <Landmark  size={16} className="text-rose-500" />;
-  if (t === 'shopping')       return <ShoppingBag size={16} className="text-purple-500" />;
+  if (t === 'restaurant') return <Utensils size={16} className="text-emerald-500" />;
+  if (t === 'cafe') return <Coffee size={16} className="text-amber-500" />;
+  if (t === 'indoor') return <Landmark size={16} className="text-violet-500" />;
+  if (t === 'nature') return <TreePine size={16} className="text-green-500" />;
+  if (t === 'adventure') return <Tent size={16} className="text-sky-500" />;
+  if (t === 'cultural') return <Landmark size={16} className="text-rose-500" />;
+  if (t === 'shopping') return <ShoppingBag size={16} className="text-purple-500" />;
   return <Compass size={16} className="text-blue-500" />;
 };
 
 const getActivityBadge = (type = '') => {
   const styles = {
-    restaurant:  'bg-emerald-100 text-emerald-700',
-    cafe:        'bg-amber-100   text-amber-700',
-    indoor:      'bg-violet-100  text-violet-700',
-    nature:      'bg-green-100   text-green-700',
-    adventure:   'bg-sky-100     text-sky-700',
-    cultural:    'bg-rose-100    text-rose-700',
-    tourist_spot:'bg-blue-100    text-blue-700',
-    shopping:    'bg-purple-100  text-purple-700',
+    restaurant: 'bg-emerald-100 text-emerald-700',
+    cafe: 'bg-amber-100   text-amber-700',
+    indoor: 'bg-violet-100  text-violet-700',
+    nature: 'bg-green-100   text-green-700',
+    adventure: 'bg-sky-100     text-sky-700',
+    cultural: 'bg-rose-100    text-rose-700',
+    tourist_spot: 'bg-blue-100    text-blue-700',
+    shopping: 'bg-purple-100  text-purple-700',
   };
   return styles[type?.toLowerCase()] || 'bg-gray-100 text-gray-600';
 };
@@ -47,7 +47,7 @@ const WeatherIcon = ({ condition = '', size = 20 }) => {
   const c = condition.toLowerCase();
   if (c.includes('rain') || c.includes('drizzle') || c.includes('shower'))
     return <CloudRain size={size} className="text-blue-400" />;
-  if (c.includes('snow'))  return <CloudSnow size={size} className="text-cyan-300" />;
+  if (c.includes('snow')) return <CloudSnow size={size} className="text-cyan-300" />;
   if (c.includes('cloud') || c.includes('overcast') || c.includes('fog'))
     return <Cloud size={size} className="text-gray-400" />;
   if (c.includes('thunder')) return <AlertTriangle size={size} className="text-yellow-400" />;
@@ -58,9 +58,8 @@ const WeatherBadge = ({ weather }) => {
   if (!weather) return null;
   const isBad = weather.is_bad_weather;
   return (
-    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-bold ${
-      isBad ? 'bg-blue-50 border border-blue-200' : 'bg-orange-50 border border-orange-100'
-    }`}>
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-bold ${isBad ? 'bg-blue-50 border border-blue-200' : 'bg-orange-50 border border-orange-100'
+      }`}>
       <WeatherIcon condition={weather.condition} size={18} />
       <span className={isBad ? 'text-blue-700' : 'text-orange-700'}>
         {weather.condition}
@@ -84,7 +83,10 @@ const WeatherBadge = ({ weather }) => {
 
 const BudgetTracker = ({ days }) => {
   const total = days.reduce((sum, d) =>
-    d.activities.reduce((s, a) => s + (parseFloat(a.estimated_cost) || 0), sum), 0
+    d.activities.reduce((s, a) => {
+      const costStr = String(a.estimated_cost || '0').replace(/[^0-9.]/g, '');
+      return s + (parseFloat(costStr) || 0);
+    }, sum), 0
   );
   return (
     <div className="px-6 py-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-6">
@@ -113,13 +115,12 @@ const ActivityCard = ({ item, dayNumber, onUpdate, onDelete }) => {
   return (
     <motion.div
       layout
-      className={`p-5 rounded-3xl border transition-all group ${
-        isRestaurant
+      className={`p-5 rounded-3xl border transition-all group ${isRestaurant
           ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white/60'
           : item.indoor
-          ? 'border-violet-100 bg-gradient-to-br from-violet-50/40 to-white/40'
-          : 'border-[var(--primary)]/8 bg-[var(--card-theme)]'
-      } shadow-sm hover:shadow-md`}
+            ? 'border-violet-100 bg-gradient-to-br from-violet-50/40 to-white/40'
+            : 'border-[var(--primary)]/8 bg-[var(--card-theme)]'
+        } shadow-sm hover:shadow-md`}
     >
       <div className="flex gap-4 items-start">
         {/* Time Icon */}
@@ -137,28 +138,28 @@ const ActivityCard = ({ item, dayNumber, onUpdate, onDelete }) => {
 
           {isEditing ? (
             <div className="space-y-3 mt-2 pr-2">
-              <input 
+              <input
                 className="w-full text-base font-black px-3 py-2 bg-black/5 rounded-lg border-2 border-transparent focus:border-[var(--primary)]/50 outline-none"
-                value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})}
+                value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })}
               />
-              <textarea 
+              <textarea
                 className="w-full text-sm mt-2 font-bold px-3 py-2 bg-black/5 rounded-lg border-2 border-transparent focus:border-[var(--primary)]/50 outline-none"
-                value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})}
+                value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })}
                 rows={3}
               />
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-[10px] font-black uppercase opacity-50 block mb-1">Time Slot</label>
-                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.time_slot} onChange={e => setEditForm({...editForm, time_slot: e.target.value})} />
+                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.time_slot} onChange={e => setEditForm({ ...editForm, time_slot: e.target.value })} />
                 </div>
                 <div className="flex-1">
                   <label className="text-[10px] font-black uppercase opacity-50 block mb-1">Cost (Rs)</label>
-                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.estimated_cost} onChange={e => setEditForm({...editForm, estimated_cost: e.target.value})} />
+                  <input className="w-full font-bold px-3 py-1.5 bg-black/5 rounded-lg outline-none text-xs" value={editForm.estimated_cost} onChange={e => setEditForm({ ...editForm, estimated_cost: e.target.value })} />
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-2 border-t border-black/5">
-                <button onClick={handleSave} className="flex-1 bg-[var(--primary)] text-white text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><Save size={14}/> SAVE</button>
-                <button onClick={() => { setIsEditing(false); setEditForm(item); }} className="flex-1 bg-black/10 text-black/60 hover:bg-black/20 text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><X size={14}/> CANCEL</button>
+                <button onClick={handleSave} className="flex-1 bg-[var(--primary)] text-white text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><Save size={14} /> SAVE</button>
+                <button onClick={() => { setIsEditing(false); setEditForm(item); }} className="flex-1 bg-black/10 text-black/60 hover:bg-black/20 text-xs font-black py-2 rounded-lg flex items-center justify-center gap-2"><X size={14} /> CANCEL</button>
               </div>
             </div>
           ) : (
@@ -200,7 +201,7 @@ const ActivityCard = ({ item, dayNumber, onUpdate, onDelete }) => {
 
               <div className="flex items-center justify-between mt-3">
                 <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-black rounded-lg">
-                  Est. Rs. {item.estimated_cost || '—'}
+                  Est. Rs. {String(item.estimated_cost || '').replace(/[^0-9.]/g, '') || '0'}
                 </span>
                 {item.description?.length > 100 && (
                   <button
@@ -235,14 +236,14 @@ const ItineraryEditor = () => {
     try {
       if (act.id) await api.patch(`activities/${act.id}/`, act);
       setDays(prev => prev.map(d => d.day_number === dayNum ? { ...d, activities: d.activities.map(a => a.id === act.id ? act : a) } : d));
-    } catch(e) { console.error("Update failed", e); }
+    } catch (e) { console.error("Update failed", e); }
   };
 
   const handleDeleteAct = async (dayNum, actId) => {
     try {
       if (actId) await api.delete(`activities/${actId}/`);
       setDays(prev => prev.map(d => d.day_number === dayNum ? { ...d, activities: d.activities.filter(a => a.id !== actId) } : d));
-    } catch(e) { console.error("Delete failed", e); }
+    } catch (e) { console.error("Delete failed", e); }
   };
 
   /** Toggle the public sharing link. Copies URL to clipboard on enable. */
@@ -258,7 +259,7 @@ const ItineraryEditor = () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
       }
-    } catch(e) { console.error("Share toggle failed", e); }
+    } catch (e) { console.error("Share toggle failed", e); }
   };
 
   return (
@@ -292,9 +293,8 @@ const ItineraryEditor = () => {
             {location.state?.trip_id && (
               <button
                 onClick={handleToggleShare}
-                className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-all ${
-                  isPublic ? 'bg-emerald-500 text-white' : 'bg-black/5 hover:bg-black/10'
-                }`}
+                className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-all ${isPublic ? 'bg-emerald-500 text-white' : 'bg-black/5 hover:bg-black/10'
+                  }`}
               >
                 {copied ? <><CheckCheck size={16} /> Copied!</> : isPublic ? <><Link size={16} /> Shared</> : <><Share2 size={16} /> Share</>}
               </button>
@@ -330,9 +330,8 @@ const ItineraryEditor = () => {
         <div className="flex gap-2 overflow-x-auto pb-2 mb-8 no-scrollbar">
           <button
             onClick={() => setActiveDay(null)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-black transition-all ${
-              activeDay === null ? 'bg-[var(--primary)] text-white' : 'opacity-40 hover:opacity-70'
-            }`}
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-black transition-all ${activeDay === null ? 'bg-[var(--primary)] text-white' : 'opacity-40 hover:opacity-70'
+              }`}
           >
             All Days
           </button>
@@ -340,9 +339,8 @@ const ItineraryEditor = () => {
             <button
               key={d.day_number}
               onClick={() => setActiveDay(d.day_number === activeDay ? null : d.day_number)}
-              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-black transition-all ${
-                activeDay === d.day_number ? 'bg-[var(--primary)] text-white' : 'opacity-40 hover:opacity-70'
-              }`}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-black transition-all ${activeDay === d.day_number ? 'bg-[var(--primary)] text-white' : 'opacity-40 hover:opacity-70'
+                }`}
             >
               Day {d.day_number}
             </button>
@@ -364,7 +362,7 @@ const ItineraryEditor = () => {
               {/* Day Header */}
               <div className="flex flex-wrap items-center gap-4 mb-5">
                 <span className="w-14 h-14 rounded-2xl font-black text-xl text-white flex items-center justify-center shadow-lg"
-                      style={{ background: 'var(--primary)' }}>
+                  style={{ background: 'var(--primary)' }}>
                   {String(d.day_number).padStart(2, '0')}
                 </span>
                 <div>
@@ -412,8 +410,8 @@ const ItineraryEditor = () => {
                           </span>
                         </div>
                       ) : null}
-                      <ActivityCard 
-                        item={act} 
+                      <ActivityCard
+                        item={act}
                         dayNumber={d.day_number}
                         onUpdate={handleUpdateAct}
                         onDelete={handleDeleteAct}
