@@ -100,3 +100,12 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"To {self.user.username}: {self.title}"
+
+# --- 4. AUTHENTICATION ---
+class EmailOTP(models.Model):
+    email = models.EmailField(unique=True)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.email} - {self.otp}"
